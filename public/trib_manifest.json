@@ -1,0 +1,100 @@
+{
+  "BR-RS": [
+    {
+      "file": "trib_rs_uruguai.json",
+      "regionId": "bacia_uruguai_BR-RS",
+      "baseRegionId": "bacia_uruguai"
+    },
+    {
+      "file": "trib_rs_jacui.json",
+      "regionId": "bacia_jacui_BR-RS",
+      "baseRegionId": "bacia_jacui"
+    },
+    {
+      "file": "trib_rs_merin.json",
+      "regionId": "bacia_merin_BR-RS",
+      "baseRegionId": "bacia_merin"
+    },
+    {
+      "file": "trib_rs_vertente_atlantica.json",
+      "regionId": "vertente_atlantica_BR-RS",
+      "baseRegionId": "vertente_atlantica"
+    }
+  ],
+  "AR": [
+    {
+      "file": "trib_negro_AR.json",
+      "regionId": "bacia_rio_negro_AR",
+      "baseRegionId": "bacia_rio_negro"
+    },
+    {
+      "file": "trib_plata_AR.json",
+      "regionId": "bacia_plata_AR",
+      "baseRegionId": "bacia_plata"
+    },
+    {
+      "file": "trib_uruguai_AR.json",
+      "regionId": "bacia_uruguai_AR",
+      "baseRegionId": "bacia_uruguai"
+    }
+  ],
+  "BR": [
+    {
+      "file": "trib_negro_BR.json",
+      "regionId": "bacia_rio_negro_BR",
+      "baseRegionId": "bacia_rio_negro"
+    },
+    {
+      "file": "trib_merin_BR.json",
+      "regionId": "bacia_merin_BR",
+      "baseRegionId": "bacia_merin"
+    },
+    {
+      "file": "trib_plata_BR.json",
+      "regionId": "bacia_plata_BR",
+      "baseRegionId": "bacia_plata"
+    },
+    {
+      "file": "trib_atlantica_BR.json",
+      "regionId": "vertente_atlantica_BR",
+      "baseRegionId": "vertente_atlantica"
+    },
+    {
+      "file": "trib_uruguai_BR.json",
+      "regionId": "bacia_uruguai_BR",
+      "baseRegionId": "bacia_uruguai"
+    }
+  ],
+  "UY": [
+    {
+      "file": "trib_uy_uruguai.json",
+      "regionId": "bacia_uruguai_UY",
+      "baseRegionId": "bacia_uruguai"
+    },
+    {
+      "file": "trib_uy_plata.json",
+      "regionId": "bacia_plata_UY",
+      "baseRegionId": "bacia_plata"
+    },
+    {
+      "file": "trib_uy_atlantica.json",
+      "regionId": "vertente_atlantica_UY",
+      "baseRegionId": "vertente_atlantica"
+    },
+    {
+      "file": "trib_uy_merin.json",
+      "regionId": "bacia_merin_UY",
+      "baseRegionId": "bacia_merin"
+    },
+    {
+      "file": "trib_uy_negro.json",
+      "regionId": "bacia_rio_negro_UY",
+      "baseRegionId": "bacia_rio_negro"
+    },
+    {
+      "file": "trib_uy_santa_lucia.json",
+      "regionId": "bacia_santa_lucia_UY",
+      "baseRegionId": "bacia_santa_lucia"
+    }
+  ]
+}

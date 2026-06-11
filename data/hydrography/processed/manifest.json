@@ -1,0 +1,32 @@
+{
+  "system": "Pescamon Hydrography Expanded",
+  "version": "2.0",
+  "created": "2026-06-01T00:16:31.451Z",
+  "territories": {
+    "BR-RS": {
+      "rivers": 0,
+      "lastUpdated": "2026-06-01T00:16:31.435Z",
+      "availableLevels": [
+        "low",
+        "medium",
+        "high",
+        "original"
+      ]
+    },
+    "UY": {
+      "rivers": 0,
+      "lastUpdated": "2026-06-01T00:16:31.450Z",
+      "availableLevels": [
+        "low",
+        "medium",
+        "high",
+        "original"
+      ]
+    }
+  },
+  "statistics": {
+    "totalTerritories": 2,
+    "totalRivers": 0,
+    "totalSize": 0
+  }
+}

@@ -1,0 +1,44 @@
+// Bacia da Lagoa dos Patos - RS
+// Região: Centro-leste do RS
+// Extensão aproximada: -32.2 a -29.8 lat, -52.3 a -50.7 lon
+
+[out:json][timeout:60];
+
+// Definir área de busca
+$bacia = (-32.2, -52.3, -29.8, -50.7);
+
+// Coletar todos os recursos hídricos
+(
+  // Rios principais
+  way["waterway"="river"]($bacia);
+  way["waterway"="stream"]($bacia);
+  
+  // Rios específicos da bacia
+  way["name"~"Rio Jacuí|Rio dos Sinos|Rio Caí|Rio Gravataí|Rio Taquari|Rio Pardo|Rio Camaquã"]($bacia);
+  
+  // Lagoa dos Patos
+  way["name"~"Lagoa dos Patos"]($bacia);
+  relation["name"~"Lagoa dos Patos"]($bacia);
+  
+  // Lago Guaíba
+  way["name"~"Guaíba|Lago Guaíba"]($bacia);
+  relation["name"~"Guaíba|Lago Guaíba"]($bacia);
+  
+  // Lagos e lagoas
+  way["natural"="water"]["water"="lake"]($bacia);
+  relation["natural"="water"]["water"="lake"]($bacia);
+  
+  // Reservatórios
+  way["water"="reservoir"]($bacia);
+  relation["water"="reservoir"]($bacia);
+  
+  // Canais
+  way["waterway"="canal"]($bacia);
+  way["waterway"="drain"]($bacia);
+);
+
+// Recursão para pegar nós
+(._; >;);
+
+// Saída
+out body;

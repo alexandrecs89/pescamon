@@ -1,0 +1,21 @@
+[build]
+  command = "npm run build"
+  publish = "dist"
+
+# Import environment variables from .env.netlify
+[build.environment]
+  VITE_SUPABASE_URL = "https://kjgqtvmoujrlhmxlehwz.supabase.co"
+  VITE_SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtqZ3F0dm1vdWpybGhteGxlaHd6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg1NTY5ODcsImV4cCI6MjA5NDEzMjk4N30.YqEEzTac6JWQ1hZydzSDqe2NfGZTxgvJDqHKdd-O1kQ"
+
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
+
+# Custom domain configuration
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Frame-Options = "DENY"
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "strict-origin-when-cross-origin"

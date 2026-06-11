@@ -1,0 +1,40 @@
+// Bacia da Lagoa Mirim - RS
+// Região: Sudeste do RS, fronteira com Uruguai
+// Extensão aproximada: -33.2 a -31.8 lat, -53.3 a -52.0 lon
+
+[out:json][timeout:60];
+
+// Definir área de busca
+$bacia = (-33.2, -53.3, -31.8, -52.0);
+
+// Coletar todos os recursos hídricos
+(
+  // Rios principais
+  way["waterway"="river"]($bacia);
+  way["waterway"="stream"]($bacia);
+  
+  // Rios específicos da bacia
+  way["name"~"Rio Jaguarão|Rio Camaquã|Rio Vacacaí|Rio Turuçu|Rio Piratini"]($bacia);
+  
+  // Lagoa Mirim
+  way["name"~"Lagoa Mirim|Laguna Merín"]($bacia);
+  relation["name"~"Lagoa Mirim|Laguna Merín"]($bacia);
+  
+  // Lagos e lagoas
+  way["natural"="water"]["water"="lake"]($bacia);
+  relation["natural"="water"]["water"="lake"]($bacia);
+  
+  // Reservatórios
+  way["water"="reservoir"]($bacia);
+  relation["water"="reservoir"]($bacia);
+  
+  // Canais
+  way["waterway"="canal"]($bacia);
+  way["waterway"="drain"]($bacia);
+);
+
+// Recursão para pegar nós
+(._; >;);
+
+// Saída
+out body;

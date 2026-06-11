@@ -1,0 +1,189 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": {
+        "id": "rio-uruguai-BR-RS",
+        "name": "Rio Uruguai",
+        "type": "frontier",
+        "territory": "BR-RS",
+        "originalId": "rio-uruguai",
+        "description": "Rio que forma fronteira entre RS e Uruguai"
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            -57,
+            -33
+          ],
+          [
+            -56.8,
+            -32.5
+          ],
+          [
+            -56.5,
+            -32
+          ],
+          [
+            -56.2,
+            -31.5
+          ],
+          [
+            -55.8,
+            -31
+          ],
+          [
+            -55.5,
+            -30.5
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": "rio-ibicui-BR-RS",
+        "name": "Rio Ibicuí",
+        "type": "crossing",
+        "territory": "BR-RS",
+        "originalId": "rio-ibicui",
+        "description": "Rio que nasce no RS e cruza para o Uruguai"
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            -55,
+            -30
+          ],
+          [
+            -54.8,
+            -30.2
+          ],
+          [
+            -54.5,
+            -30.5
+          ],
+          [
+            -54.2,
+            -30.8
+          ],
+          [
+            -54,
+            -31
+          ],
+          [
+            -53.8,
+            -31.2
+          ],
+          [
+            -53.5,
+            -31.5
+          ],
+          [
+            -53.2,
+            -31.8
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": "rio-jacui",
+        "name": "Rio Jacuí",
+        "type": "internal",
+        "territory": "BR-RS",
+        "originalId": "rio-jacui",
+        "description": "Rio totalmente dentro do RS"
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            -52.5,
+            -29
+          ],
+          [
+            -52.3,
+            -29.2
+          ],
+          [
+            -52,
+            -29.5
+          ],
+          [
+            -51.8,
+            -29.8
+          ],
+          [
+            -51.5,
+            -30
+          ],
+          [
+            -51.2,
+            -30.2
+          ],
+          [
+            -51,
+            -30.5
+          ],
+          [
+            -50.8,
+            -30.8
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": "rio-negro",
+        "name": "Río Negro",
+        "type": "internal",
+        "territory": "BR-RS",
+        "originalId": "rio-negro",
+        "description": "Rio totalmente dentro do Uruguai"
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            -56.5,
+            -32
+          ],
+          [
+            -56.3,
+            -32.2
+          ],
+          [
+            -56,
+            -32.5
+          ],
+          [
+            -55.8,
+            -32.8
+          ],
+          [
+            -55.5,
+            -33
+          ],
+          [
+            -55.2,
+            -33.2
+          ],
+          [
+            -55,
+            -33.5
+          ],
+          [
+            -54.8,
+            -33.8
+          ]
+        ]
+      }
+    }
+  ]
+}

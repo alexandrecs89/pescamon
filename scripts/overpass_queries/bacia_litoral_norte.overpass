@@ -1,0 +1,36 @@
+// Bacia do Litoral Norte - RS
+// Região: Litoral norte do RS
+// Extensão aproximada: -29.5 a -28.0 lat, -49.8 a -48.5 lon
+
+[out:json][timeout:60];
+
+// Definir área de busca
+$bacia = (-29.5, -49.8, -28.0, -48.5);
+
+// Coletar todos os recursos hídricos
+(
+  // Rios principais
+  way["waterway"="river"]($bacia);
+  way["waterway"="stream"]($bacia);
+  
+  // Rios específicos da bacia
+  way["name"~"Rio Mampituba|Rio Araranguá|Rio Marombas|Rio Itajaí do Sul"]($bacia);
+  
+  // Lagos e lagoas costeiras
+  way["natural"="water"]["water"="lake"]($bacia);
+  relation["natural"="water"]["water"="lake"]($bacia);
+  
+  // Reservatórios
+  way["water"="reservoir"]($bacia);
+  relation["water"="reservoir"]($bacia);
+  
+  // Canais
+  way["waterway"="canal"]($bacia);
+  way["waterway"="drain"]($bacia);
+);
+
+// Recursão para pegar nós
+(._; >;);
+
+// Saída
+out body;

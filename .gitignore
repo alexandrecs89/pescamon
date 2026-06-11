@@ -1,0 +1,27 @@
+node_modules
+dist
+.env
+.env.local
+.env.netlify
+supabase/.temp/
+*.log
+.DS_Store
+Thumbs.db
+
+# Local Netlify folder
+.netlify
+
+# Arquivos JSON grandes de dados geográficos (>50MB — não cabem no GitHub)
+public/todos_rios_rs_raw.json
+public/trib_uruguai_inpe_BR-RS.json
+
+# Arquivos intermediários de scripts
+scripts/*.raw.json
+scripts/_tmp_*.mjs
+scripts/_legacy/
+
+# Ferramentas locais / temporários
+.claude/
+.bho_tmp/
+.uy_tmp/
+.uc_tmp/

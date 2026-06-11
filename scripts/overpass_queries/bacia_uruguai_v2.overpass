@@ -1,0 +1,17 @@
+[out:json][timeout:60];
+
+// Bacia do Rio Uruguai - RS
+// Bounding box: sul, oeste, norte, leste
+
+(
+  way["waterway"="river"](-33.75,-57.65,-27.0,-54.0);
+  way["waterway"="stream"](-33.75,-57.65,-27.0,-54.0);
+  way["name"~"Uruguai|Quaraí|Ibicuí|Santa Maria|Pardo|Passo Fundo"](-33.75,-57.65,-27.0,-54.0);
+  way["natural"="water"](-33.75,-57.65,-27.0,-54.0);
+  relation["natural"="water"](-33.75,-57.65,-27.0,-54.0);
+  way["water"="reservoir"](-33.75,-57.65,-27.0,-54.0);
+);
+
+(._; >;);
+
+out body;

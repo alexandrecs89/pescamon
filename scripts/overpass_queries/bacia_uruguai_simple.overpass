@@ -1,0 +1,42 @@
+[out:json][timeout:90];
+
+// Bacia Hidrográfica do Rio Uruguai - RS (versão simplificada)
+// Bounding box: oeste do RS
+// (-33.75,-57.65,-27.0,-53.0)
+
+(
+  // Rio Uruguai
+  way["name"~"Uruguai|Uruguay"]["waterway"="river"](-33.75,-57.65,-27.0,-53.0);
+  
+  // Rio Santa Maria
+  way["name"~"Santa Maria"]["waterway"="river"](-33.75,-57.65,-27.0,-53.0);
+  
+  // Rio Ibicuí
+  way["name"~"Ibicuí|Ibicuy"]["waterway"="river"](-33.75,-57.65,-27.0,-53.0);
+  
+  // Rio Quaraí
+  way["name"~"Quaraí|Cuareim"]["waterway"="river"](-33.75,-57.65,-27.0,-53.0);
+  
+  // Rio Ijuí
+  way["name"~"Ijuí"]["waterway"="river"](-33.75,-57.65,-27.0,-53.0);
+  
+  // Rio Turvo
+  way["name"~"Turvo"]["waterway"~"river|stream"](-33.75,-57.65,-27.0,-53.0);
+  
+  // Rio Santa Rosa
+  way["name"~"Santa Rosa"]["waterway"="river"](-33.75,-57.65,-27.0,-53.0);
+  
+  // Apuaê
+  way["name"~"Apuaê|Apuae"]["waterway"~"river|stream"](-33.75,-57.65,-27.0,-53.0);
+  
+  // Passo Fundo
+  way["name"~"Passo Fundo"]["waterway"~"river|stream"](-33.75,-57.65,-27.0,-53.0);
+  
+  // Todos os outros rios da região
+  way["waterway"="river"](-33.75,-57.65,-27.0,-53.0);
+  way["waterway"="stream"](-33.75,-57.65,-27.0,-53.0);
+);
+
+(._; >;);
+
+out body;

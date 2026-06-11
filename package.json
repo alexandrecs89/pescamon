@@ -1,0 +1,25 @@
+{
+  "scripts": {
+    "dev": "vite --host 0.0.0.0",
+    "build": "vite build",
+    "preview": "vite preview --host 0.0.0.0",
+    "rivers:convert": "node scripts/convert-rivers.mjs",
+    "rivers:fetch": "node scripts/fetch-rivers-overpass.mjs",
+    "rivers:all": "node scripts/convert-rivers.mjs && node scripts/fetch-rivers-overpass.mjs"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.105.4",
+    "@turf/turf": "^7.3.5",
+    "@vitejs/plugin-react": "latest",
+    "leaflet": "latest",
+    "lucide-react": "latest",
+    "node-fetch": "^3.3.2",
+    "react": "latest",
+    "react-dom": "latest",
+    "react-grid-layout": "^2.2.3",
+    "react-leaflet": "latest",
+    "shapefile": "^0.6.6",
+    "unzipper": "^0.12.3",
+    "vite": "latest"
+  }
+}

@@ -1,0 +1,733 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": {
+        "id": "rio-uruguai-BR-RS",
+        "name": "Rio Uruguai",
+        "type": "frontier",
+        "category": "river",
+        "size": "large",
+        "territory": "BR-RS",
+        "originalId": "rio-uruguai",
+        "description": "Rio que forma fronteira entre RS e Uruguai",
+        "simplificationLevel": "low"
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            -57,
+            -33
+          ],
+          [
+            -56.8,
+            -32.5
+          ],
+          [
+            -56.2,
+            -31.5
+          ],
+          [
+            -55.8,
+            -31
+          ],
+          [
+            -55.2,
+            -30
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": "rio-jacui",
+        "name": "Rio Jacuí",
+        "type": "internal",
+        "category": "river",
+        "size": "large",
+        "territory": "BR-RS",
+        "originalId": "rio-jacui",
+        "description": "Principal rio do RS, nasce na Serra Geral",
+        "simplificationLevel": "low"
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            -52.5,
+            -29
+          ],
+          [
+            -52,
+            -29.5
+          ],
+          [
+            -51.8,
+            -29.8
+          ],
+          [
+            -51.2,
+            -30.2
+          ],
+          [
+            -50.8,
+            -30.8
+          ],
+          [
+            -50.2,
+            -31.2
+          ],
+          [
+            -50,
+            -31.5
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": "rio-ibicui-BR-RS",
+        "name": "Rio Ibicuí",
+        "type": "crossing",
+        "category": "river",
+        "size": "large",
+        "territory": "BR-RS",
+        "originalId": "rio-ibicui",
+        "description": "Principal afluente do rio Uruguai",
+        "simplificationLevel": "low"
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            -55,
+            -30
+          ],
+          [
+            -52.8,
+            -32.2
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": "rio-ibicui-mirim",
+        "name": "Rio Ibicuí-Mirim",
+        "type": "internal",
+        "category": "river",
+        "size": "medium",
+        "territory": "BR-RS",
+        "originalId": "rio-ibicui-mirim",
+        "description": "Afluente do rio Ibicuí",
+        "simplificationLevel": "low"
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            -54.5,
+            -29.5
+          ],
+          [
+            -54,
+            -30
+          ],
+          [
+            -53.8,
+            -30.3
+          ],
+          [
+            -53.5,
+            -30.5
+          ],
+          [
+            -53.2,
+            -30.8
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": "rio-gravatai",
+        "name": "Rio Gravataí",
+        "type": "internal",
+        "category": "river",
+        "size": "medium",
+        "territory": "BR-RS",
+        "originalId": "rio-gravatai",
+        "description": "Rio da região metropolitana de Porto Alegre",
+        "simplificationLevel": "low"
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            -51,
+            -29.8
+          ],
+          [
+            -51.5,
+            -30.3
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": "rio-dos-sinos",
+        "name": "Rio dos Sinos",
+        "type": "internal",
+        "category": "river",
+        "size": "medium",
+        "territory": "BR-RS",
+        "originalId": "rio-dos-sinos",
+        "description": "Rio do Vale dos Sinos",
+        "simplificationLevel": "low"
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            -51.2,
+            -29.6
+          ],
+          [
+            -51.7,
+            -30.1
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": "rio-cai",
+        "name": "Rio Cai",
+        "type": "internal",
+        "category": "river",
+        "size": "medium",
+        "territory": "BR-RS",
+        "originalId": "rio-cai",
+        "description": "Rio da região do Vale do Caí",
+        "simplificationLevel": "low"
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            -51.8,
+            -29.5
+          ],
+          [
+            -52.2,
+            -29.9
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": "rio-taquari",
+        "name": "Rio Taquari",
+        "type": "internal",
+        "category": "river",
+        "size": "large",
+        "territory": "BR-RS",
+        "originalId": "rio-taquari",
+        "description": "Rio da região central do RS",
+        "simplificationLevel": "low"
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            -52.8,
+            -28.5
+          ],
+          [
+            -51.6,
+            -29.7
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": "rio-jaguari",
+        "name": "Rio Jaguari",
+        "type": "internal",
+        "category": "river",
+        "size": "medium",
+        "territory": "BR-RS",
+        "originalId": "rio-jaguari",
+        "description": "Rio que banha a região de Jaguari",
+        "simplificationLevel": "low"
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            -53.5,
+            -28.8
+          ],
+          [
+            -52.7,
+            -29.6
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": "rio-jaguari-mirim",
+        "name": "Rio Jaguari-Mirim",
+        "type": "internal",
+        "category": "river",
+        "size": "small",
+        "territory": "BR-RS",
+        "originalId": "rio-jaguari-mirim",
+        "description": "Afluente do rio Jaguari",
+        "simplificationLevel": "low"
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            -53.2,
+            -28.5
+          ],
+          [
+            -52.6,
+            -29.1
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": "rio-negro",
+        "name": "Río Negro",
+        "type": "internal",
+        "category": "river",
+        "size": "large",
+        "territory": "BR-RS",
+        "originalId": "rio-negro",
+        "description": "Principal rio interior do Uruguai",
+        "simplificationLevel": "low"
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            -56.5,
+            -32
+          ],
+          [
+            -56,
+            -32.5
+          ],
+          [
+            -55.8,
+            -32.8
+          ],
+          [
+            -55.2,
+            -33.2
+          ],
+          [
+            -54.8,
+            -33.8
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": "rio-queguay",
+        "name": "Río Queguay",
+        "type": "internal",
+        "category": "river",
+        "size": "medium",
+        "territory": "BR-RS",
+        "originalId": "rio-queguay",
+        "description": "Afluente do rio Uruguai",
+        "simplificationLevel": "low"
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            -57,
+            -31.5
+          ],
+          [
+            -56.2,
+            -32.3
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": "rio-rio-negro-mirim",
+        "name": "Arroyo Negro",
+        "type": "internal",
+        "category": "stream",
+        "size": "small",
+        "territory": "BR-RS",
+        "originalId": "rio-rio-negro-mirim",
+        "description": "Afluente do rio Negro",
+        "simplificationLevel": "low"
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            -56.2,
+            -31.8
+          ],
+          [
+            -55.5,
+            -32.5
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": "lagoa-dos-patos",
+        "name": "Lagoa dos Patos",
+        "type": "internal",
+        "category": "lake",
+        "size": "large",
+        "territory": "BR-RS",
+        "originalId": "lagoa-dos-patos",
+        "description": "Maior lagoa do Brasil, localizada no RS",
+        "simplificationLevel": "low"
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            -52,
+            -31.5
+          ],
+          [
+            -51.5,
+            -31
+          ],
+          [
+            -51.2,
+            -30.8
+          ],
+          [
+            -51,
+            -30.5
+          ],
+          [
+            -50.5,
+            -30
+          ],
+          [
+            -50.2,
+            -29.8
+          ],
+          [
+            -50,
+            -29.5
+          ],
+          [
+            11,
+            31.5
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": "lagoa-mirim-BR-RS",
+        "name": "Lagoa Mirim",
+        "type": "frontier",
+        "category": "lake",
+        "size": "large",
+        "territory": "BR-RS",
+        "originalId": "lagoa-mirim",
+        "description": "Lagoa que faz fronteira entre RS e Uruguai",
+        "simplificationLevel": "low"
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            -53.5,
+            -32.5
+          ],
+          [
+            -21.5,
+            -0.5
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": "arroio-diluvio",
+        "name": "Arroio Dilúvio",
+        "type": "internal",
+        "category": "stream",
+        "size": "small",
+        "territory": "BR-RS",
+        "originalId": "arroio-diluvio",
+        "description": "Arroio urbano de Porto Alegre",
+        "simplificationLevel": "low"
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            -51.2,
+            -30
+          ],
+          [
+            -51.5,
+            -30.3
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": "arroio-salvador",
+        "name": "Arroio Salvador",
+        "type": "internal",
+        "category": "stream",
+        "size": "small",
+        "territory": "BR-RS",
+        "originalId": "arroio-salvador",
+        "description": "Arroio da região de Porto Alegre",
+        "simplificationLevel": "low"
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            -51.3,
+            -30.1
+          ],
+          [
+            -51.6,
+            -30.4
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": "arroio-ferreira",
+        "name": "Arroio Ferreira",
+        "type": "internal",
+        "category": "stream",
+        "size": "small",
+        "territory": "BR-RS",
+        "originalId": "arroio-ferreira",
+        "description": "Arroio da região metropolitana",
+        "simplificationLevel": "low"
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            -51.1,
+            -29.9
+          ],
+          [
+            -51.4,
+            -30.2
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": "arroio-moinho",
+        "name": "Arroio Moinho",
+        "type": "internal",
+        "category": "stream",
+        "size": "small",
+        "territory": "BR-RS",
+        "originalId": "arroio-moinho",
+        "description": "Arroio histórico de Porto Alegre",
+        "simplificationLevel": "low"
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            -51.4,
+            -29.8
+          ],
+          [
+            -51.7,
+            -30.1
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": "arroyo-cuareim-BR-RS",
+        "name": "Arroyo Cuareim",
+        "type": "frontier",
+        "category": "stream",
+        "size": "small",
+        "territory": "BR-RS",
+        "originalId": "arroyo-cuareim",
+        "description": "Arroio que faz fronteira",
+        "simplificationLevel": "low"
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            -55.5,
+            -30.5
+          ],
+          [
+            -55,
+            -31
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": "arroyo-de-la-virgen",
+        "name": "Arroyo de la Virgen",
+        "type": "internal",
+        "category": "stream",
+        "size": "small",
+        "territory": "BR-RS",
+        "originalId": "arroyo-de-la-virgen",
+        "description": "Arroio do norte do Uruguai",
+        "simplificationLevel": "low"
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            -56,
+            -31
+          ],
+          [
+            -55.2,
+            -31.8
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": "arroyo-del-tigre",
+        "name": "Arroyo del Tigre",
+        "type": "internal",
+        "category": "stream",
+        "size": "small",
+        "territory": "BR-RS",
+        "originalId": "arroyo-del-tigre",
+        "description": "Arroio da região norte",
+        "simplificationLevel": "low"
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            -56.2,
+            -30.8
+          ],
+          [
+            -55.5,
+            -31.5
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": "barragem-itauba",
+        "name": "Barragem de Itaúba",
+        "type": "internal",
+        "category": "reservoir",
+        "size": "small",
+        "territory": "BR-RS",
+        "originalId": "barragem-itauba",
+        "description": "Reservatório de abastecimento",
+        "simplificationLevel": "low"
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            -52.8,
+            -28.5
+          ],
+          [
+            -51.4,
+            -27.1
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": "lago-barragem-itauba",
+        "name": "Lago da Barragem de Itaúba",
+        "type": "internal",
+        "category": "reservoir",
+        "size": "small",
+        "territory": "BR-RS",
+        "originalId": "lago-barragem-itauba",
+        "description": "Lago artificial da barragem",
+        "simplificationLevel": "low"
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            -52.7,
+            -28.4
+          ],
+          [
+            -51.5,
+            -27.2
+          ]
+        ]
+      }
+    }
+  ]
+}

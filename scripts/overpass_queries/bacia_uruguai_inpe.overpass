@@ -1,0 +1,66 @@
+[out:json][timeout:120];
+
+// Bacia Hidrográfica do Rio Uruguai - RS
+// Divisão INPE: drena para o Rio Uruguai
+// Bounding box: oeste do RS, fronteira com Argentina
+// lat: -33.75 (sul) a -27.0 (norte)
+// lon: -57.65 (oeste) a -53.0 (leste)
+
+// Coletar rios principais e afluentes da bacia
+(
+  // Rio Uruguai (rio principal)
+  way["name"~"^(Rio Uruguai|Rio Uruguay|Río Uruguay)$"]["waterway"="river"](-33.75,-57.65,-27.0,-53.0);
+  relation["name"~"^(Rio Uruguai|Rio Uruguay|Río Uruguay)$"]["waterway"="river"](-33.75,-57.65,-27.0,-53.0);
+  
+  // Rio Santa Maria
+  way["name"~"^(Rio Santa Maria|Río Santa María)$"]["waterway"="river"](-33.75,-57.65,-27.0,-53.0);
+  
+  // Rio Ibicuí
+  way["name"~"^(Rio Ibicuí|Rio Ibicuy|Río Ibicuí)$"]["waterway"="river"](-33.75,-57.65,-27.0,-53.0);
+  
+  // Rio Quaraí / Rio Cuareim
+  way["name"~"^(Rio Quaraí|Rio Cuareim|Río Cuareim)$"]["waterway"="river"](-33.75,-57.65,-27.0,-53.0);
+  
+  // Rio Ijuí
+  way["name"~"^(Rio Ijuí|Río Ijuí|Rio Ijui)$"]["waterway"="river"](-33.75,-57.65,-27.0,-53.0);
+  
+  // Rio Turvo
+  way["name"~"^(Rio Turvo|Arroio Turvo)$"]["waterway"~"river|stream"](-33.75,-57.65,-27.0,-53.0);
+  
+  // Rio Santa Rosa
+  way["name"~"^(Rio Santa Rosa|Rio Santarosa)$"]["waterway"="river"](-33.75,-57.65,-27.0,-53.0);
+  
+  // Santo Cristo
+  way["name"~"^(Santo Cristo|Arroio Santo Cristo)$"]["waterway"~"river|stream"](-33.75,-57.65,-27.0,-53.0);
+  
+  // Apuaê / Inhandava
+  way["name"~"^(Apuaê|Inhandava|Rio Apuaê|Arroio Apuaê)$"]["waterway"~"river|stream"](-33.75,-57.65,-27.0,-53.0);
+  
+  // Passo Fundo
+  way["name"~"^(Passo Fundo|Rio Passo Fundo|Arroio Passo Fundo)$"]["waterway"~"river|stream"](-33.75,-57.65,-27.0,-53.0);
+  
+  // Rio da Várzea
+  way["name"~"^(Rio da Várzea|Rio da Varzea|Arroio da Várzea)$"]["waterway"~"river|stream"](-33.75,-57.65,-27.0,-53.0);
+  
+  // Alto Jacuí (parte da bacia do Uruguai - afluentes que drenam para o Jacuí que vai para o Guaíba/Patos)
+  // Nota: O Alto Jacuí está na bacia do Guaíba, não do Uruguai. Vou buscar apenas se houver confusão
+  way["name"~"^(Alto Jacuí|Alto Jacui)$"]["waterway"~"river|stream"](-33.75,-57.65,-27.0,-53.0);
+  
+  // Todos os outros rios e arroios da região (afluentes secundários)
+  way["waterway"="river"](-33.75,-57.65,-27.0,-53.0);
+  way["waterway"="stream"](-33.75,-57.65,-27.0,-53.0);
+  
+  // Lagos e lagoas
+  way["natural"="water"]["water"="lake"](-33.75,-57.65,-27.0,-53.0);
+  relation["natural"="water"]["water"="lake"](-33.75,-57.65,-27.0,-53.0);
+  
+  // Reservatórios
+  way["water"="reservoir"](-33.75,-57.65,-27.0,-53.0);
+  relation["water"="reservoir"](-33.75,-57.65,-27.0,-53.0);
+);
+
+// Recursão para pegar nós dos ways
+(._; >;);
+
+// Saída
+out body;

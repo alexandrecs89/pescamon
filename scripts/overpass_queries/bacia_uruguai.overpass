@@ -1,0 +1,36 @@
+// Bacia do Rio Uruguai - RS
+// Região: Oeste do RS, fronteira com Argentina
+// Extensão aproximada: -33.75 a -27.0 lat, -57.65 a -54.0 lon
+
+[out:json][timeout:60];
+
+// Definir área de busca (bbox da bacia)
+$bacia = (-33.75, -57.65, -27.0, -54.0);
+
+// Coletar todos os recursos hídricos
+(
+  // Rios principais e afluentes
+  way["waterway"="river"]($bacia);
+  way["waterway"="stream"]($bacia);
+  
+  // Rios específicos da bacia
+  way["name"~"Rio Quaraí|Rio Ibicuí|Rio Santa Maria|Rio Pardo|Rio Passo Fundo|Rio Uruguay|Rio Uruguai"]($bacia);
+  
+  // Lagos e lagoas
+  way["natural"="water"]["water"="lake"]($bacia);
+  relation["natural"="water"]["water"="lake"]($bacia);
+  
+  // Reservatórios
+  way["water"="reservoir"]($bacia);
+  relation["water"="reservoir"]($bacia);
+  
+  // Canais
+  way["waterway"="canal"]($bacia);
+  way["waterway"="drain"]($bacia);
+);
+
+// Recursão para pegar nós
+(._; >;);
+
+// Saída
+out body;

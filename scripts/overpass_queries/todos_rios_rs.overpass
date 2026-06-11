@@ -1,0 +1,7 @@
+[out:json][timeout:120];
+(
+  way["waterway"~"^(river|stream|canal)$"](-33.75,-57.65,-27.0,-49.68);
+);
+out body;
+>;
+out skel qt;

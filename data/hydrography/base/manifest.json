@@ -1,0 +1,15 @@
+{
+  "source": "Sample Data",
+  "version": "1.0",
+  "createdDate": "2026-05-31T23:54:56.219Z",
+  "territories": [
+    "BR-RS",
+    "UY"
+  ],
+  "totalRivers": 5,
+  "rules": {
+    "frontier": "Rios que formam fronteiras são divididos por margem",
+    "crossing": "Rios que cruzam fronteiras são divididos em segmentos territoriais",
+    "internal": "Rios internos mantêm território único"
+  }
+}
