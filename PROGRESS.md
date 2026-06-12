@@ -1,7 +1,7 @@
 # Pescamon - Progresso do Projeto
 
 **Data da última sessão:** 12 de junho de 2026  
-**Status:** Hidrografia oficial (RS + UY) + conformidade legal + seletor geográfico no mapa. Expansão para SC em andamento. 🗺️
+**Status:** Hidrografia oficial (RS + SC + UY) + conformidade legal + seletor geográfico no mapa. 🗺️
 
 > Para a descrição completa de funcionalidades, ver o **README.md** (mantido alinhado). Este arquivo foca no histórico de sessões e nos detalhes operacionais (Stripe, Edge Functions, como retomar).
 
@@ -14,7 +14,7 @@
 - **Conformidade legal ciente de região**: 101 UCs do CNUC/MMA no RS (`build_protected_areas.mjs` → `protected_areas_rs.json`) + 21 áreas SNAP do UY; vedas/defeso por região (`VEDAS` com campo `region`; `FISHING_LAW_NOTE`).
 - **Catálogo de espécies ciente de país** (50 espécies): exóticos do RS só no Brasil; vedas granulares por espécie (piracema IBAMA IN 193/2008; tainha/bagre regulados).
 - **Seletor geográfico no mapa** (`<GeoPicker>`): mundo → país → estado; Brasil e Uruguai clicáveis; 27 estados do Brasil desenhados (RS clicável). Dados via `build_br_geo.mjs` (`br_boundary.json`, `br_states.json`). Lembra a última região.
-- **Em andamento:** expansão para **Santa Catarina (BR-SC)** seguindo `docs/EXPANSAO-ESTADOS.md` (fronteira IBGE codarea 42 → hidrografia BHO → UCs CNUC → legislação → espécies → habilitar no seletor).
+- **Santa Catarina (BR-SC) — CONCLUÍDO:** fronteira IBGE (codarea 42), hidrografia BHO (45.951 trechos em 2 bacias, simplificados Douglas-Peucker), 179 UCs do CNUC, legislação (piracema da Bacia do Rio Uruguai + safra da tainha) e espécies; clicável no seletor geográfico. Branches do app generalizados para `/^BR-/`; `build_protected_areas.mjs` parametrizado por UF.
 
 Branch de trabalho: `feat/hidrografia-oficial-areas-protegidas` (PR #1).
 
@@ -87,8 +87,8 @@ Branch de trabalho: `feat/hidrografia-oficial-areas-protegidas` (PR #1).
 > Roadmap detalhado no **README.md** (seção "Próximos passos").
 
 ### Alta Prioridade — escalar territorialmente
-1. **Generalizar os scripts e o app** antes de fechar o 2º estado (remover hardcode "RS": `isPointInRS`, parâmetros de bacia/Strahler) → `build_boundary.mjs <uf>` / `build_hydrography.mjs <uf>` (ver `docs/EXPANSAO-ESTADOS.md` §8).
-2. **Santa Catarina (BR-SC)** — estado-piloto da nova esteira (EM ANDAMENTO).
+1. **Unificar os scripts de hidrografia** num único `build_hydrography.mjs <uf>` (RS e SC repetem ~90% do código). Ver `docs/EXPANSAO-ESTADOS.md` §8.
+2. **Próximo estado** (ex.: Paraná, codarea 41) repetindo a esteira validada com SC.
 3. **Áreas do Uruguai no modelo region-aware** (`protected_areas_uy.json`).
 
 ### Média Prioridade
@@ -207,6 +207,6 @@ VITE_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIs...
 ---
 
 **Última atualização:** 12/06/2026 por Alexandre  
-**Status:** 🟢 Pagamento operacional · 🗺️ Dados oficiais RS+UY · 🚧 Expansão SC em andamento
+**Status:** 🟢 Pagamento operacional · 🗺️ Dados oficiais RS + SC + UY · 🧭 Seletor geográfico no mapa
 
 🎣 **Pescamon - A inteligência artificial da pesca!**

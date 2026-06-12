@@ -40,6 +40,7 @@ A regra do projeto é **sempre usar os dados oficiais do governo local**. Quando
 | Região | Fonte oficial | Conteúdo gerado |
 |---|---|---|
 | **Rio Grande do Sul (BR-RS)** | ANA — BHO 2017 (geopackage) + fronteira IBGE (codarea 43) | `public/trib_rs_*.json` (43.522 trechos em 4 bacias: Uruguai, Jacuí, Mirim, Vertente Atlântica), `public/rs_boundary.json` |
+| **Santa Catarina (BR-SC)** | ANA — BHO 2017 + fronteira IBGE (codarea 42) | `public/trib_sc_*.json` (45.951 trechos em 2 bacias: Uruguai interior, Vertente Atlântica; simplificados Douglas-Peucker), `public/sc_boundary.json` |
 | **Uruguai (UY)** | DINAGUA (WFS — cursos `c257` + cuencas Nível 1 `c097`) | `public/trib_uy_*.json` (6 bacias), `public/uy_boundary.json` |
 | **Brasil (silhueta + 27 estados)** | IBGE malhas v3 | `public/br_boundary.json`, `public/br_states.json` (seletor geográfico) |
 | **Santa Lucía (legado MVP)** | OSM relation 2736318 / Overpass | `public/export.geojson`, `public/tributarios.geojson` (~614 afluentes) |
@@ -272,8 +273,9 @@ Um pilar do projeto é ajudar o pescador a pescar **dentro da lei**. As camadas 
 - Temperatura da água via proxy Open-Meteo; sensores físicos dariam maior precisão.
 - Login social Apple ainda não configurado (Google e Facebook ativos).
 - LSTM inativo por falta de volume de dados (threshold: ≥30 capturas/espécie).
-- Hidrografia oficial disponível para **RS** e **UY**; demais estados/regiões seguem o pipeline de expansão (ver `docs/EXPANSAO-ESTADOS.md`).
-- Os scripts hardcoded para o RS (`isPointInRS`, parâmetros de bacia) ainda precisam ser **generalizados** antes de escalar para o 2º estado.
+- Hidrografia oficial disponível para **RS**, **SC** e **UY**; demais estados/regiões seguem o pipeline de expansão (ver `docs/EXPANSAO-ESTADOS.md`).
+- Os scripts de hidrografia por estado (`build_rs_hydrography.mjs`, `build_sc_hydrography.mjs`) ainda repetem código — falta unificá-los num único script parametrizado por UF.
+- Espécies de SC usam o catálogo compartilhado da Bacia do Uruguai; um refinamento por curso (litoral vs. interior) fica como melhoria futura.
 - Bug conhecido: troca muito rápida de país pode somar trechos de duas regiões (fetches em voo não cancelados).
 
 ## Deploy e execução
@@ -314,9 +316,10 @@ No Netlify: Site settings → Environment variables → adicionar as mesmas duas
 - Build Vite com code splitting (~906 kB JS, ~120 kB CSS)
 - PWA com service worker e cache offline
 - **Hidrografia oficial RS** (ANA BHO 2017 — 43.522 trechos em 4 bacias, recortados à fronteira IBGE) com render estável (pool de canvas por bacia)
+- **Hidrografia oficial SC** (ANA BHO 2017 — 45.951 trechos em 2 bacias: Uruguai interior + Vertente Atlântica, simplificados Douglas-Peucker)
 - **Hidrografia oficial UY** (DINAGUA — cursos + cuencas Nível 1, 6 bacias) substituindo o MVP do Santa Lucía
-- **Seletor geográfico no mapa** (mundo → país → estado): Brasil/Uruguai clicáveis; 27 estados do Brasil desenhados; lembra a última região
-- **Conformidade legal ciente de região**: 101 UCs do CNUC (RS) + 21 áreas SNAP (UY); vedas/defeso por região (RS: piracema IBAMA, defeso Lagoa dos Patos, tainha/bagre)
+- **Seletor geográfico no mapa** (mundo → país → estado): Brasil/Uruguai clicáveis; 27 estados do Brasil desenhados (RS e SC clicáveis); lembra a última região
+- **Conformidade legal ciente de região**: 101 UCs CNUC (RS) + 179 UCs CNUC (SC) + 21 áreas SNAP (UY); vedas/defeso por região (piracema IBAMA na Bacia do Rio Uruguai = RS+SC; defeso Lagoa dos Patos e safra da tainha)
 - **Catálogo de espécies ciente de país** (50 espécies; exóticos do RS só no Brasil; vedas granulares por espécie)
 - **46 corpos d'água** + **~614 afluentes** + tributários por bacia/país (UY/AR/BR)
 - **11 macro-regiões** do Uruguai com seletor hierárquico por distância
@@ -357,13 +360,13 @@ No Netlify: Site settings → Environment variables → adicionar as mesmas duas
 
 ### 🔄 Próximos passos (roadmap)
 
-> **Foco atual:** o RS atingiu paridade com o UY (hidrografia oficial + áreas protegidas + legislação + catálogo de espécies) e o seletor geográfico já comporta os 27 estados. O próximo grande objetivo é **escalar para novos estados** de forma reproduzível, sem repetir o trabalho manual do RS.
+> **Foco atual:** RS e SC entregues com dados oficiais (hidrografia + áreas + legislação + espécies). O seletor geográfico comporta os 27 estados. O próximo objetivo é **escalar para mais estados** reduzindo o trabalho manual a cada novo.
 
 #### 🥇 Alta prioridade — escalar territorialmente
 
-- [ ] **Generalizar os scripts e o app antes do 2º estado** (`docs/EXPANSAO-ESTADOS.md` §8): hoje há acoplamento "RS" em poucos pontos (`isPointInRS`/`loadRSBoundary`, parâmetros de bacia/Strahler fixos). Parametrizar `build_boundary.mjs <uf>` e `build_hydrography.mjs <uf>` (codarea IBGE, prefixo de id, mapa de bacias, `BASIN_MIN_STRAHLER`) para não duplicar nem repetir bugs.
-- [ ] **Santa Catarina (BR-SC)** como primeiro estado-piloto da nova esteira: fronteira IBGE (codarea 42) → hidrografia BHO recortada/classificada → UCs CNUC (`protected_areas_sc.json`) → legislação SC → espécies regionais → habilitar no seletor (`AVAILABLE` em `build_br_geo.mjs`). Servirá de validação do pipeline genérico.
-- [ ] **Áreas protegidas do Uruguai no modelo region-aware**: migrar o `SNAP_AREAS` inline para `protected_areas_uy.json` (mesmo formato do RS), unificando a camada legal.
+- [ ] **Unificar os scripts de hidrografia num único `build_hydrography.mjs <uf>`** (`docs/EXPANSAO-ESTADOS.md` §8): hoje `build_rs_hydrography.mjs` e `build_sc_hydrography.mjs` repetem ~90% do código (mudam só bbox, bacias, `classifyTerminal` e `BASIN_MIN_STRAHLER`). Parametrizar evita duplicação no 3º estado. (Já feito: `build_protected_areas.mjs <uf>`, `build_sc_boundary.mjs`, e os branches do app passaram a usar `/^BR-/`.)
+- [ ] **Próximo estado (ex.: Paraná, codarea 41)**: repetir a esteira (fronteira → hidrografia → UCs CNUC → legislação → espécies → habilitar no seletor).
+- [ ] **Áreas protegidas do Uruguai no modelo region-aware**: migrar o `SNAP_AREAS` inline para `protected_areas_uy.json` (mesmo formato do RS/SC), unificando a camada legal.
 
 #### 🥈 Média prioridade — qualidade e produto
 
@@ -383,6 +386,7 @@ No Netlify: Site settings → Environment variables → adicionar as mesmas duas
 
 #### ✅ Concluído recentemente (jun/2026)
 
+- [x] **Expansão Santa Catarina (BR-SC)**: hidrografia oficial (45.951 trechos, 2 bacias), 179 UCs CNUC, legislação (piracema + tainha) e espécies; clicável no seletor geográfico
 - [x] **Hidrografia oficial RS** (ANA BHO 2017, 43.522 trechos, 4 bacias, recorte IBGE) + render por bacia
 - [x] **Hidrografia oficial UY** (DINAGUA, 6 bacias) substituindo o MVP do Santa Lucía
 - [x] **Áreas protegidas RS** (101 UCs CNUC) + **legislação de pesca ciente de região**
@@ -450,10 +454,10 @@ No Netlify: Site settings → Environment variables → adicionar as mesmas duas
 
 | Arquivo | Responsabilidade |
 |---|---|
-| `scripts/build_rs_boundary.mjs` | Fronteira oficial do RS (IBGE malhas v3, codarea 43) → `public/rs_boundary.json` |
-| `scripts/build_rs_hydrography.mjs` | Hidrografia do RS (ANA BHO 2017): classifica por fluxo, recorta à fronteira → `public/trib_rs_*.json` |
+| `scripts/build_rs_boundary.mjs` · `build_sc_boundary.mjs` | Fronteira oficial do estado (IBGE malhas v3, codarea 43=RS / 42=SC) → `public/<uf>_boundary.json` |
+| `scripts/build_rs_hydrography.mjs` · `build_sc_hydrography.mjs` | Hidrografia do estado (ANA BHO 2017): classifica por fluxo, recorta à fronteira, simplifica → `public/trib_<uf>_*.json` |
 | `scripts/build_uy_boundary.mjs` · `build_uy_hydrography.mjs` | Fronteira e hidrografia do Uruguai (DINAGUA WFS) → `public/uy_boundary.json`, `trib_uy_*.json` |
-| `scripts/build_protected_areas.mjs` | UCs do CNUC/MMA (shapefile) → `public/protected_areas_rs.json` (101 UCs) |
+| `scripts/build_protected_areas.mjs <uf>` | UCs do CNUC/MMA (shapefile) → `public/protected_areas_<uf>.json` (RS=101, SC=179) |
 | `scripts/build_br_geo.mjs` | Silhueta nacional + 27 estados (IBGE) → `public/br_boundary.json`, `public/br_states.json` |
 | `scripts/gpkg_geom.mjs` | Parser WKB/GPB do geopackage (genérico, usado pela hidrografia) |
 | `public/trib_manifest.json` | Mapeia país/estado → arquivos de bacia (carregados sob demanda) |
