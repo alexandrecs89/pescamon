@@ -1,8 +1,10 @@
 ﻿# Pescamon
 
-**Plataforma web de apoio à pesca esportiva no Cone Sul.** Cobre toda a hidrografia do Uruguai e do Rio Grande do Sul (BR) — rios interiores, bacia do Río Negro, Jacuí, Lagoa dos Patos, litoral norte do Río Uruguay, rios orientais da ecorregião Laguna dos Patos/Mirim, lagoas costeiras atlânticas — com expansão em curso para demais estados brasileiros e Argentina.
+**Plataforma web de apoio à pesca esportiva no Cone Sul.** Cobre toda a hidrografia do Uruguai e do Rio Grande do Sul (BR) — rios interiores, bacia do Río Negro, Jacuí, Lagoa dos Patos, litoral norte do Río Uruguay, rios orientais da ecorregião Laguna dos Patos/Mirim, lagoas costeiras atlânticas — com expansão em curso para os demais estados brasileiros e Argentina.
 
-**Estado atual (maio 2026):** aplicação em produção em [pescamon.com.br](https://pescamon.com.br) / [pescamon-app.netlify.app](https://pescamon-app.netlify.app). Última sessão de desenvolvimento: 31/05/2026.
+A hidrografia de cada região vem de **dados oficiais do governo local** (ANA/IBGE no Brasil, DINAGUA no Uruguai), recortada à fronteira oficial e classificada por bacia. A escolha de região é feita por um **seletor geográfico no mapa** (mundo → país → estado).
+
+**Estado atual (junho 2026):** aplicação em produção em [pescamon.com.br](https://pescamon.com.br) / [pescamon-app.netlify.app](https://pescamon-app.netlify.app). Última sessão de desenvolvimento: 12/06/2026.
 
 Stack: **React 18 + Vite · react-leaflet · Supabase · Open-Meteo · IndexedDB · PWA**
 
@@ -31,19 +33,26 @@ O Pescamon lê o traçado geográfico real dos cursos d'água (OpenStreetMap / O
 
 ## Dados geográficos
 
-| Fonte | Conteúdo |
-|---|---|
-| `public/export.geojson` | Traçado do Rio Santa Lucía (OSM relation 2736318) |
-| `public/tributarios.geojson` | ~614 afluentes da bacia do Santa Lucía |
-| `public/trib_*_UY/AR/BR.json` | Tributários por bacia e país (carregados sob demanda) |
-| `public/trib_manifest.json` | Manifesto bacia → arquivos por país |
-| Overpass API | Geometria de EXTRA_RIVERS (46 corpos d'água adicionais) |
+### Política de fonte de dados
+
+A regra do projeto é **sempre usar os dados oficiais do governo local**. Quando uma região não possui dado oficial acessível, recorre-se ao **HydroSHEDS** como fallback. Toda a hidrografia é gerada por scripts reproduzíveis (`scripts/build_*`), recortada à fronteira oficial da região e classificada por bacia (ver `docs/EXPANSAO-ESTADOS.md`).
+
+| Região | Fonte oficial | Conteúdo gerado |
+|---|---|---|
+| **Rio Grande do Sul (BR-RS)** | ANA — BHO 2017 (geopackage) + fronteira IBGE (codarea 43) | `public/trib_rs_*.json` (43.522 trechos em 4 bacias: Uruguai, Jacuí, Mirim, Vertente Atlântica), `public/rs_boundary.json` |
+| **Uruguai (UY)** | DINAGUA (WFS — cursos `c257` + cuencas Nível 1 `c097`) | `public/trib_uy_*.json` (6 bacias), `public/uy_boundary.json` |
+| **Brasil (silhueta + 27 estados)** | IBGE malhas v3 | `public/br_boundary.json`, `public/br_states.json` (seletor geográfico) |
+| **Santa Lucía (legado MVP)** | OSM relation 2736318 / Overpass | `public/export.geojson`, `public/tributarios.geojson` (~614 afluentes) |
+
+`public/trib_manifest.json` mapeia cada país/estado → seus arquivos de bacia (carregados sob demanda). Os overlays "herói" legados do Santa Lucía (`EXTRA_RIVERS`, geometria azul) estão desativados por `SHOW_LEGACY_HERO_RIVERS = false`.
 
 **Segmentação morfológica** (`buildMorphologicalSegments`): cada linha é dividida individualmente — nunca concatenadas entre si — em segmentos respeitando comprimento mínimo/máximo e ângulo de curvatura, parametrizados por tipo de curso (rio, arroio, canal, cañada, quebrada, lagoon, estuário).
 
-**Seletor hierárquico de local**: dropdown com 11 macro-regiões do Uruguai, ordenadas por distância do usuário. Cada região expande sua lista de cursos. Clicar em um curso faz o mapa voar (`flyToBounds`) para cobrir todo o traçado.
+**Seletor geográfico (mapa país → estado)** (`<GeoPicker>` em `main.jsx`): a região é escolhida visualmente no mapa. Nível mundo desenha Brasil e Uruguai como polígonos clicáveis; clicar no Uruguai entra direto, clicar no Brasil abre os 27 estados (RS destacado/clicável; demais com aviso "Em breve"). O app **lembra a última região** (o seletor só abre quando não há região salva); o botão "Trocar região" na topbar reabre o mapa.
 
-**Localização do usuário**: o mapa inicializa centrado na posição real do usuário (via `navigator.geolocation`); fallback para coordenada central do Uruguai se negado.
+**Seletor de cursos**: dentro de cada região, um dropdown hierárquico lista as bacias/cursos ordenados por distância do usuário. Clicar em um curso faz o mapa voar (`flyToBounds`) para cobrir todo o traçado.
+
+**Localização do usuário**: o mapa inicializa centrado na posição real do usuário (via `navigator.geolocation`); fallback para a coordenada central da região selecionada se negado.
 
 ## Modelo preditivo
 
@@ -74,7 +83,9 @@ Ponderação final: `55% heurístico + 45% (55% ML + 45% posterior bayesiano)`.
 
 **LSTM** (`src/lstm.js`): infraestrutura pronta, ativa automaticamente com ≥30 capturas/espécie (inativo por falta de dados).
 
-## Espécies cadastradas (47 espécies)
+## Espécies cadastradas (50 espécies)
+
+As espécies são **cientes de país**: cada uma declara em quais regiões ocorre (`regions`; sem o campo = compartilhada UY+BR-RS), e o seletor de espécies (`availableSpecies`) filtra pela região ativa. As **vedas** (`getVedaStatus`/`getVedasAtivas`) também são cientes de região, e a nota legal do cabeçalho (`FISHING_LAW_NOTE`) muda conforme o país (ver "Conformidade legal").
 
 ### Rios interiores e bacia do Santa Lucía
 - Tararira ⚠️ — *Hoplias malabaricus* · mín. 33 cm
@@ -107,6 +118,14 @@ Ponderação final: `55% heurístico + 45% (55% ML + 45% posterior bayesiano)`.
 
 ### Costa atlântica e Río de la Plata
 - Corvina negra ⚠️, Corvina ⚠️, Lenguado, Lisa, Lacha, Burriqueta, Pescadilla ⚠️
+
+### Rio Grande do Sul (BR-RS)
+- Bagre-marinho ⚠️ — *Genidens barbus* · estuarino, regulado (SEMA-RS Res. 001/2018) · ocorre também no estuário UY
+- Tilápia-do-nilo 🌿 — *Oreochromis niloticus* · exótica invasora
+- Black bass 🌿 — *Micropterus salmoides* · esportivo introduzido
+- Tucunaré 🌿 — *Cichla kelberi* · ciclídeo predador introduzido
+- Migratórias da Bacia do Rio Uruguai sob **piracema** (IBAMA IN 193/2008): Dourado, Surubim, Pacu, Pira-pitã, Jaú, Grumatã, Piapara/Boga
+- Tainha (*Mugil liza*) e bagre-marinho: pesca **regulada** na Lagoa dos Patos (badge "Regulamentada")
 
 **Legenda:** ⚠️ Regulamentada · 🚫 Veda absoluta (CARU Res. 59/12 / Decreto 149/997 DINARA) · 🔵 Vulnerável · 🌿 Invasora
 
@@ -172,6 +191,15 @@ Ponderação final: `55% heurístico + 45% (55% ML + 45% posterior bayesiano)`.
 - Temperatura da água: proxy `soil_temperature_0_to_7cm` + sensores IoT reais
 - Fase lunar: ciclo sinódico 29.53 dias (Julian Day) — previsão 7 dias
 - Dados marinhos: Open-Meteo Marine API (ondas, swell) no painel lunar
+
+### Conformidade legal (áreas protegidas + legislação) — ciente de região
+
+Um pilar do projeto é ajudar o pescador a pescar **dentro da lei**. As camadas legais são carregadas conforme a região ativa:
+
+- **Áreas protegidas (polígonos no mapa + card lateral)**:
+  - **Uruguai**: 21 áreas do SNAP (`SNAP_AREAS`, inline) com polígonos georreferenciados por categoria.
+  - **Rio Grande do Sul**: **101 Unidades de Conservação** oficiais do **CNUC/MMA** (todas as esferas — 44 federais, 30 estaduais, 27 municipais), em `public/protected_areas_rs.json` (geradas por `scripts/build_protected_areas.mjs`). Cada UC traz a nota de pesca por grupo: Proteção Integral = pesca proibida; Uso Sustentável = sob regras. Modelo escalável: `protected_areas_<país>.json` carregado por região.
+- **Legislação de pesca (vedas/defeso por espécie e nota legal)**: `VEDAS` é ciente de região (campo `region`). No RS: piracema da Bacia do Rio Uruguai (~out–jan, IBAMA IN 193/2008) por espécie migratória; defeso da Lagoa dos Patos/Guaíba (IBAMA IN 197/2008); tainha sobre-explotada (MMA IN 5/2004) e bagre (SEMA-RS Res. 001/2018) como "Regulamentada". No UY: vedas CARU/DINARA. **As datas exatas mudam por portaria anual** — o app sempre exibe a ressalva, sem inventar datas.
 
 ### Comunidade (`src/SocialFeed.jsx`)
 - Feed social com posts de texto + até 4 fotos + espécie/peso/local — scroll infinito
@@ -243,8 +271,10 @@ Ponderação final: `55% heurístico + 45% (55% ML + 45% posterior bayesiano)`.
 - Atributos de habitat (largura, profundidade, fluxo) são heurísticos — melhorariam com sensores IoT reais.
 - Temperatura da água via proxy Open-Meteo; sensores físicos dariam maior precisão.
 - Login social Apple ainda não configurado (Google e Facebook ativos).
-- Tabela `planned_trips` precisa ser criada no Supabase para persistir pescarias planejadas em produção.
 - LSTM inativo por falta de volume de dados (threshold: ≥30 capturas/espécie).
+- Hidrografia oficial disponível para **RS** e **UY**; demais estados/regiões seguem o pipeline de expansão (ver `docs/EXPANSAO-ESTADOS.md`).
+- Os scripts hardcoded para o RS (`isPointInRS`, parâmetros de bacia) ainda precisam ser **generalizados** antes de escalar para o 2º estado.
+- Bug conhecido: troca muito rápida de país pode somar trechos de duas regiões (fetches em voo não cancelados).
 
 ## Deploy e execução
 
@@ -276,16 +306,21 @@ VITE_SUPABASE_ANON_KEY=<anon key do painel Supabase>
 
 No Netlify: Site settings → Environment variables → adicionar as mesmas duas chaves.
 
-## Status (maio 2026)
+## Status (junho 2026)
 
 ### ✅ Implementado e estável
 
 - Deploy Netlify + domínio `pescamon.com.br` + SSL automático
 - Build Vite com code splitting (~906 kB JS, ~120 kB CSS)
 - PWA com service worker e cache offline
+- **Hidrografia oficial RS** (ANA BHO 2017 — 43.522 trechos em 4 bacias, recortados à fronteira IBGE) com render estável (pool de canvas por bacia)
+- **Hidrografia oficial UY** (DINAGUA — cursos + cuencas Nível 1, 6 bacias) substituindo o MVP do Santa Lucía
+- **Seletor geográfico no mapa** (mundo → país → estado): Brasil/Uruguai clicáveis; 27 estados do Brasil desenhados; lembra a última região
+- **Conformidade legal ciente de região**: 101 UCs do CNUC (RS) + 21 áreas SNAP (UY); vedas/defeso por região (RS: piracema IBAMA, defeso Lagoa dos Patos, tainha/bagre)
+- **Catálogo de espécies ciente de país** (50 espécies; exóticos do RS só no Brasil; vedas granulares por espécie)
 - **46 corpos d'água** + **~614 afluentes** + tributários por bacia/país (UY/AR/BR)
 - **11 macro-regiões** do Uruguai com seletor hierárquico por distância
-- **47 espécies** com perfis ecológicos, conservação CARU/DINARA, vedas e tamanhos mínimos
+- **50 espécies** (cientes de país) com perfis ecológicos, conservação CARU/DINARA/IBAMA/SEMA-RS, vedas e tamanhos mínimos
 - **Heatmap morfológico completo**: bandas laterais (`lateralProfile`) em **todos** os cursos selecionados — Rio Santa Lucía, EXTRA_RIVERS (Rio Negro, Uruguay, etc.) e afluentes. Linhas estáticas somem ao ativar heatmap. Cor sempre derivada da espécie selecionada.
 - Bayesian-ensemble (logístico + random forest + prior espacial gaussiano adaptativo)
 - Pescaria Ativa com fotos, peso, isca e retomada automática de sessão
@@ -313,30 +348,29 @@ No Netlify: Site settings → Environment variables → adicionar as mesmas duas
 - **Web Push completo**: hook `usePushNotifications`, botão Bell/BellOff na topbar, tabela `push_subscriptions`, Edge Function `send-push` deployada, secrets VAPID configurados — pronto para envio de notificações
 - **Plano Premium (infraestrutura completa)**: tabelas `plans`, `user_subscriptions`, `invoices`, `stripe_events` — hook `usePremium` — componente `PaywallModal` — aba de assinatura no `UserDashboard` — badge Premium na topbar — preços: R$ 10/mês ou R$ 50/ano (58% economia) / $80 UYU mensal ou $400 UYU anual / US$ 2 mensal ou US$ 10 anual — **detecção automática de moeda** (BRL/UYU/USD) com dropdown para troca
 - **Plano Premium (guards implementados)**: heatmap histórico por mês/estação (guard no TemporalFilter com badge Premium) — conteúdo exclusivo Pescademia (guard nos cards com badge Premium) — paywall funcional
-- **APAs/SNAP (polígonos precisos)**: todas as 21 áreas protegidas do Uruguai com polígonos georreferenciados realistas (não mais hexágonos genéricos)
+- **Áreas protegidas cientes de região**: 21 áreas SNAP do Uruguai (polígonos georreferenciados) + **101 UCs oficiais do CNUC/MMA no RS** (federais, estaduais e municipais) via `protected_areas_<país>.json`, com nota de pesca por grupo (Proteção Integral / Uso Sustentável)
 - **i18n popups do mapa completo**: todos os labels das APAs (Parque Nacional, Paisagem Protegida, Monumento Natural, Área de Manejo, Reserva de Recursos, Zona de Captação), país, relevância de pesca e lei de proteção — localizados PT/ES/EN
 - **Modelo barométrico**: `pressureBonus()` integrado em `calculateProbability()` — `pressureSensitivity` por espécie (Pejerrey 0.9 · Dourado 0.85 · Boga 0.7 · Tararira 0.5 · Mojarra 0.4 · Bagre 0.3); previsão 7 dias inclui `surface_pressure_mean` com tendência diária; `WeekForecastWidget` exibe pressão + tendência colorida no painel de detalhes
 - **Relatórios Preditivos Premium** (`src/FishingReports.jsx`): espécies favoritas, configuração de endereço residencial + raio (25/50/100/200 km), relatórios mensais (todo dia 1) e semanais (toda segunda-feira) com melhores dias por espécie (score = clima + pressão + temperatura) e locais sugeridos dentro do raio; geração sob demanda; guard Premium; tabelas `favorite_species`, `user_report_settings`, `fishing_reports` (SQL em `supabase-fishing-reports.sql`); **Edge Function `generate-fishing-report` deployada** com `--no-verify-jwt`; agendamento automático via **cron-job.org** (mensal `0 6 1 * *` · semanal `0 6 * * 1`); secret `CRON_SECRET=pesca_cron_2026_kjgq` configurado no Supabase
 - **Calculadora de Nó e Linha** (`src/KnotCalculator.jsx`): 3 entradas (tipo de linha, diâmetro, nó); calcula resistência nominal da linha (kg) e resistência real do nó após perda; barra visual de retenção (%); dificuldade, uso indicado e passo-a-passo recolhível para 6 nós (Palomar, Clinch, Uni, Albright, FG Knot, Loop duplo); i18n PT/ES/EN; card na página principal
 - **Calculadora de Bóia e Chumbada** (`src/BuoyCalculator.jsx`): 7 variáveis de entrada (espécie, peso estimado, correnteza, profundidade, ambiente, isca, técnica); recomenda tipo e gramatura de chumbada (torpedo/pêra/oval/redonda), tipo e capacidade da bóia (waggler/palito/corrediça/sem bóia), diâmetro e resistência da linha, número de anzol e comprimento do baixeiro; 2 dicas contextuais explicativas; i18n PT/ES/EN; card recolhível na página principal
 
-### 🔄 Próximos passos
+### 🔄 Próximos passos (roadmap)
 
-#### 🥇 Alta prioridade — engajamento e retenção
+> **Foco atual:** o RS atingiu paridade com o UY (hidrografia oficial + áreas protegidas + legislação + catálogo de espécies) e o seletor geográfico já comporta os 27 estados. O próximo grande objetivo é **escalar para novos estados** de forma reproduzível, sem repetir o trabalho manual do RS.
 
-- [x] **Notificações push reais**: Edge Function `check-fishing-conditions` deployada e agendada via cron-job.org (07:00 UTC)
-- [x] **Tabela `planned_trips`**: criada no Supabase com RLS, índices e trigger de `updated_at`
-- [x] **Compartilhamento de relatórios**: botão Web Share API com fallback clipboard em cada card de relatório
-- [x] **Mapa de locais no relatório preditivo**: ao expandir um relatório, pins roxos (`CircleMarker`) aparecem no mapa para os locais sugeridos; desaparecem ao colapsar
+#### 🥇 Alta prioridade — escalar territorialmente
 
-#### 🥈 Média prioridade — produto e monetização
+- [ ] **Generalizar os scripts e o app antes do 2º estado** (`docs/EXPANSAO-ESTADOS.md` §8): hoje há acoplamento "RS" em poucos pontos (`isPointInRS`/`loadRSBoundary`, parâmetros de bacia/Strahler fixos). Parametrizar `build_boundary.mjs <uf>` e `build_hydrography.mjs <uf>` (codarea IBGE, prefixo de id, mapa de bacias, `BASIN_MIN_STRAHLER`) para não duplicar nem repetir bugs.
+- [ ] **Santa Catarina (BR-SC)** como primeiro estado-piloto da nova esteira: fronteira IBGE (codarea 42) → hidrografia BHO recortada/classificada → UCs CNUC (`protected_areas_sc.json`) → legislação SC → espécies regionais → habilitar no seletor (`AVAILABLE` em `build_br_geo.mjs`). Servirá de validação do pipeline genérico.
+- [ ] **Áreas protegidas do Uruguai no modelo region-aware**: migrar o `SNAP_AREAS` inline para `protected_areas_uy.json` (mesmo formato do RS), unificando a camada legal.
 
-- [ ] **Expansão Argentina**: Río Paraná (Corrientes, Entre Ríos), baixo Río Uruguay, Delta — espécies Dorado, Surubí, Pacú, Manguruyú
-- [x] **Expansão Brasil — Rio Grande do Sul**: `BR-RS` ativo no seletor de país; bacias dinâmicas (Jacuí, Lagoa dos Patos, Mirim, Uruguai, Vertente Atlântica); 10 rios/lagoas principais (Lagoa dos Patos, Jacuí, Guaíba, Camaquã, Lagoa Mirim, Ibicuí, Quaraí, Pelotas, Jaguarão, Rio Uruguai RS); tributários reutilizados dos arquivos BR; novos tipos de habitat (`rio_jacui`, `lagoa_patos`, `rio_camaqua`, `arroio_rs`); espécies regionais (corvina, tainha, dourado, crenicichla, gymnogeophagus, austrolebias)
-- [x] **Dados oficiais DINAMA/MVOTMA**: Edge Function `ingest-dinama` busca dados das estações automáticas do OAN (Observatório Ambiental Nacional) diariamente às 08:00 UTC; parseia parâmetros (O₂, turbidez, pH, condutividade, temperatura) → score 0–100; upsert em `water_quality` com `source_type=official`; view `water_quality_data` criada para compatibilidade com front-end; tabela `dinama_ingest_log` para auditoria; SQL em `supabase-dinama-ingest.sql`
-- [x] **Calculadora de nó e linha**: implementada em `src/KnotCalculator.jsx`
-- [x] **Histórico climático no relatório**: gráfico Canvas 30 dias (temperatura máx/mínima, pressão hPa, precipitação) dentro de cada card de relatório preditivo — carregado sob demanda via Open-Meteo
-- [ ] **API pública para pesquisadores**: OpenAPI documentada via Supabase Edge Functions (rate-limit, auth por token)
+#### 🥈 Média prioridade — qualidade e produto
+
+- [ ] **Bug: acúmulo de rios ao trocar de país rapidamente** — cancelar fetches de hidrografia em voo ao trocar de região (evita somar trechos de UY+RS). Conhecido e isolado.
+- [ ] **Expansão Argentina**: Río Paraná (Corrientes, Entre Ríos), baixo Río Uruguay, Delta — dados oficiais (IGN/INA) ou HydroSHEDS como fallback; espécies Dorado, Surubí, Pacú, Manguruyú.
+- [ ] **Onboarding pelo seletor geográfico**: usar o mapa de seleção como tela de boas-vindas para novos usuários (primeira escolha de região guiada).
+- [ ] **API pública para pesquisadores**: OpenAPI documentada via Supabase Edge Functions (rate-limit, auth por token).
 
 #### 🥉 Baixa prioridade / Futuro
 
@@ -346,6 +380,19 @@ No Netlify: Site settings → Environment variables → adicionar as mesmas duas
 - LSTM (`src/lstm.js` pronto — ativa com ≥30 capturas/espécie; inativo por falta de dados)
 - Sensores ESP32 físicos (infraestrutura IoT pronta no Supabase)
 - Integração Strava/Komoot para GPX de rotas de acesso ao local de pesca
+
+#### ✅ Concluído recentemente (jun/2026)
+
+- [x] **Hidrografia oficial RS** (ANA BHO 2017, 43.522 trechos, 4 bacias, recorte IBGE) + render por bacia
+- [x] **Hidrografia oficial UY** (DINAGUA, 6 bacias) substituindo o MVP do Santa Lucía
+- [x] **Áreas protegidas RS** (101 UCs CNUC) + **legislação de pesca ciente de região**
+- [x] **Catálogo de espécies ciente de país** (vedas granulares; exóticos do RS)
+- [x] **Seletor geográfico no mapa** (mundo → país → estado; 27 estados do Brasil)
+- [x] **Notificações push reais** (`check-fishing-conditions` via cron-job.org)
+- [x] **Tabela `planned_trips`** (RLS + índices + trigger)
+- [x] **Relatórios preditivos**: compartilhamento (Web Share), mapa de locais sugeridos, histórico climático 30d
+- [x] **Dados oficiais DINAMA/MVOTMA** (`ingest-dinama`, score 0–100, `water_quality`)
+- [x] **Calculadoras** de Nó/Linha e de Bóia/Chumbada (i18n PT/ES/EN)
 
 ## Estrutura de arquivos relevante (`src/`)
 
@@ -398,6 +445,20 @@ No Netlify: Site settings → Environment variables → adicionar as mesmas duas
 | `PaywallModal.jsx` | Modal de assinatura Premium com 3 moedas (BRL/UYU/USD) |
 | `usePremium.js` | Hook de status Premium + checkout Stripe + guard helper |
 | `supabase-subscriptions.sql` | Schema SQL: tabelas `plans`, `user_subscriptions`, `invoices`, `stripe_events` |
+
+### Pipeline de dados geográficos (`scripts/` + `public/` + `docs/`)
+
+| Arquivo | Responsabilidade |
+|---|---|
+| `scripts/build_rs_boundary.mjs` | Fronteira oficial do RS (IBGE malhas v3, codarea 43) → `public/rs_boundary.json` |
+| `scripts/build_rs_hydrography.mjs` | Hidrografia do RS (ANA BHO 2017): classifica por fluxo, recorta à fronteira → `public/trib_rs_*.json` |
+| `scripts/build_uy_boundary.mjs` · `build_uy_hydrography.mjs` | Fronteira e hidrografia do Uruguai (DINAGUA WFS) → `public/uy_boundary.json`, `trib_uy_*.json` |
+| `scripts/build_protected_areas.mjs` | UCs do CNUC/MMA (shapefile) → `public/protected_areas_rs.json` (101 UCs) |
+| `scripts/build_br_geo.mjs` | Silhueta nacional + 27 estados (IBGE) → `public/br_boundary.json`, `public/br_states.json` |
+| `scripts/gpkg_geom.mjs` | Parser WKB/GPB do geopackage (genérico, usado pela hidrografia) |
+| `public/trib_manifest.json` | Mapeia país/estado → arquivos de bacia (carregados sob demanda) |
+| `docs/EXPANSAO-ESTADOS.md` | **Guia reproduzível para adicionar novos estados** (pipeline + armadilhas) |
+| `CONTEXT.md` | Contexto enxuto para agentes de IA (como rodar, estado do RS, arquivos-chave) |
 
 ### 📝 Legenda
 - ✅ Implementado · 🔄 Planejado · ⏸️ Adiado
