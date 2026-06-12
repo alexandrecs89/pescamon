@@ -2159,6 +2159,11 @@ const species = [
   { id: 'hoplosternum', name: 'Cuyaya', namePt: 'Tamboatá', nameEs: 'Cuyaya / Cascarudo', nameEn: 'Armored catfish', scientificName: 'Hoplosternum littorale', color: '#78350f', size: '15-25 cm', diet: 'detritos, invertebrados bentônicos, larvas de insetos e matéria orgânica', activity: 'noturna-crepuscular', habits: 'bagre coraçado maior que o cascarudo comum; frequenta banhados, lagoas rasas e margens de rios com fundo lodoso; constrói ninhos flutuantes de bolhas; muito comum no norte e leste do Uruguai', preferences: { depth: 0.7, flow: 0.12, vegetation: 0.88, shade: 0.68, turbidity: 0.82, oxygen: 0.22, structure: 0.78, temperature: 23, solar: 8 } },
   { id: 'leporino', name: 'Trompa roja', namePt: 'Piau', nameEs: 'Leporino / Trompa roja', nameEn: 'Banded leporinus', scientificName: 'Leporinus lacustris', conservation: { status: 'regulated', minSize: 28, note: 'Tamanho mínimo recomendado: 28 cm. Espécie nativa dos grandes rios do Uruguai; não confundir com a boga (Megaleporinus obtusidens).' }, color: '#f59e0b', size: '18-35 cm', diet: 'frutos, sementes, algas, invertebrados e material vegetal', activity: 'diurna', habits: 'herbívoro-onívoro de rios de médio a grande porte; ocorre no Río Uruguay e afluentes maiores (Queguay, Daymán, Arapey); nada em cardumes perto de margens vegetadas e em corredeiras; identificado pelas faixas escuras transversais no corpo', preferences: { depth: 2.8, flow: 0.58, vegetation: 0.65, shade: 0.32, turbidity: 0.40, oxygen: 0.72, structure: 0.48, temperature: 21, solar: 50 } },
   { id: 'pachyurus', name: 'Corvina de río', namePt: 'Corvina-do-rio', nameEs: 'Corvina de río', nameEn: 'South American river croaker', scientificName: 'Pachyurus bonariensis', conservation: { status: 'regulated', minSize: 28, note: 'Tamanho mínimo recomendado: 28 cm. Espécie de água doce do Río de la Plata e Río Uruguay; diferente da corvina de rio (Plagioscion) e das corvinas costeiras.' }, color: '#818cf8', size: '20-45 cm', diet: 'peixes pequenos, crustáceos e insetos aquáticos', activity: 'noturna-crepuscular', habits: 'corvina exclusivamente de água doce; ocupa canais profundos do baixo Río Uruguay, Río de la Plata e o embalse do Río Negro; muito confundida com a corvina-de-rio (Plagioscion ternetzi) e com corvinas costeiras', preferences: { depth: 4.5, flow: 0.38, vegetation: 0.25, shade: 0.50, turbidity: 0.68, oxygen: 0.58, structure: 0.55, temperature: 18, solar: 10 } },
+  // ── Espécies do RS — estuarina regulada + esportivos introduzidos ───────────
+  { id: 'bagre_marinho', name: 'Bagre de mar', namePt: 'Bagre-marinho', nameEs: 'Bagre de mar', nameEn: 'White sea catfish', scientificName: 'Genidens barbus', regions: ['UY', 'BR-RS'], conservation: { status: 'regulated', minSize: 35, note: 'Espécie estuarina sobre-explotada. Pesca regulada pela Resolução SEMA-RS 001/2018 (Lagoa dos Patos, Lago Guaíba e Bacia do Rio Tramandaí). Respeite tamanhos e períodos definidos para o estoque.' }, color: '#9ca3af', size: '30-90 cm', diet: 'crustáceos, moluscos e peixes de fundo estuarino', activity: 'noturna', habits: 'bagre estuarino-marinho que sobe à Lagoa dos Patos e ao Guaíba para reprodução; fundos lamosos de estuário e baixos rios; estoque sensível à sobrepesca', preferences: { depth: 4.0, flow: 0.30, vegetation: 0.18, shade: 0.45, turbidity: 0.72, oxygen: 0.55, structure: 0.50, temperature: 19, solar: 8 } },
+  { id: 'tilapia', name: 'Tilapia', namePt: 'Tilápia-do-nilo', nameEs: 'Tilapia', nameEn: 'Nile tilapia', scientificName: 'Oreochromis niloticus', regions: ['BR-RS'], conservation: { status: 'invasive', note: 'Espécie exótica invasora, muito comum em açudes, lagoas e reservatórios do RS. A soltura em novos ambientes é proibida e prejudica a fauna nativa.' }, color: '#65a30d', size: '20-45 cm', diet: 'onívora — algas, detritos, plâncton e invertebrados', activity: 'diurna', habits: 'exótica tolerante a águas paradas, quentes e de baixo oxigênio; abundante em açudes e reservatórios; reproduz-se intensamente', preferences: { depth: 1.8, flow: 0.20, vegetation: 0.70, shade: 0.45, turbidity: 0.58, oxygen: 0.40, structure: 0.55, temperature: 25, solar: 40 } },
+  { id: 'black_bass', name: 'Black bass', namePt: 'Black bass', nameEs: 'Perca americana', nameEn: 'Largemouth bass', scientificName: 'Micropterus salmoides', regions: ['BR-RS'], conservation: { status: 'invasive', note: 'Peixe esportivo exótico (introduzido), em reservatórios e açudes de água mais fria e limpa do RS. Não solte em novos ambientes aquáticos.' }, color: '#16a34a', size: '30-60 cm', diet: 'predador — peixes, anfíbios e crustáceos', activity: 'diurna-crepuscular', habits: 'exótico de emboscada associado a estruturas submersas e vegetação; prefere água limpa, mais fria e parada de açudes e represas', preferences: { depth: 3.0, flow: 0.18, vegetation: 0.72, shade: 0.62, turbidity: 0.30, oxygen: 0.70, structure: 0.85, temperature: 20, solar: 30 } },
+  { id: 'tucunare', name: 'Tucunaré', namePt: 'Tucunaré', nameEs: 'Tucunaré', nameEn: 'Peacock bass', scientificName: 'Cichla kelberi', regions: ['BR-RS'], conservation: { status: 'invasive', note: 'Ciclídeo predador exótico, introduzido em reservatórios mais quentes do RS. Não solte em novos ambientes — predador agressivo da fauna nativa.' }, color: '#f59e0b', size: '30-60 cm', diet: 'predador visual — peixes', activity: 'diurna', habits: 'exótico de emboscada perto de estruturas e margens; prefere água quente, parada e limpa de reservatórios; muito visual e territorial', preferences: { depth: 2.6, flow: 0.22, vegetation: 0.55, shade: 0.55, turbidity: 0.28, oxygen: 0.66, structure: 0.82, temperature: 26, solar: 38 } },
 ].sort((a, b) => a.name.localeCompare(b.name, 'pt'));
 
 function spName(sp, lang) {
@@ -2705,6 +2710,15 @@ const VEDAS = [
     authority: 'IBAMA IN 193/2008 (Bacia do Rio Uruguai)',
     note: 'Piracema na Bacia do Rio Uruguai: defeso de ~1°/out a 31/jan (confirme a portaria da temporada). Surubim/pintado proibido no período. Só linha de mão ou vara/anzol, 1 petrecho, barco não motorizado.',
   },
+  // Demais migratórias da Bacia do Rio Uruguai sob a mesma piracema (IBAMA IN 193/2008).
+  { speciesId: 'pacu', region: 'BR-RS', type: 'piracema', period: { start: [10, 1], end: [1, 31] }, authority: 'IBAMA IN 193/2008 (Bacia do Rio Uruguai)', note: 'Piracema (~1°/out a 31/jan, confirme a portaria): pacu é migratória e fica proibida no defeso. Só linha/vara, 1 petrecho, barco não motorizado.' },
+  { speciesId: 'pira_pita', region: 'BR-RS', type: 'piracema', period: { start: [10, 1], end: [1, 31] }, authority: 'IBAMA IN 193/2008 (Bacia do Rio Uruguai)', note: 'Piracema (~1°/out a 31/jan, confirme a portaria): piracanjuba (pira-pitã) é migratória e fica proibida no defeso.' },
+  { speciesId: 'manguruyu', region: 'BR-RS', type: 'piracema', period: { start: [10, 1], end: [1, 31] }, authority: 'IBAMA IN 193/2008 (Bacia do Rio Uruguai)', note: 'Piracema (~1°/out a 31/jan, confirme a portaria): jaú é migratória e fica proibido no defeso.' },
+  { speciesId: 'sabalito', region: 'BR-RS', type: 'piracema', period: { start: [10, 1], end: [1, 31] }, authority: 'IBAMA IN 193/2008 (Bacia do Rio Uruguai)', note: 'Piracema (~1°/out a 31/jan, confirme a portaria): grumatã/curimbatá é migratória e fica proibida no defeso.' },
+  { speciesId: 'boga', region: 'BR-RS', type: 'piracema', period: { start: [10, 1], end: [1, 31] }, authority: 'IBAMA IN 193/2008 (Bacia do Rio Uruguai)', note: 'Piracema (~1°/out a 31/jan, confirme a portaria): piapara/boga é migratória e fica proibida no defeso.' },
+  // Estuário (Lagoa dos Patos) — espécies reguladas (sem período fixo simples; ver portaria).
+  { speciesId: 'lisa', region: 'BR-RS', type: 'regulada', authority: 'MMA IN 5/2004 · regras da safra (Lagoa dos Patos)', note: 'Tainha é espécie sobre-explotada (Anexo II, MMA IN 5/2004). A safra na Lagoa dos Patos é regulada por período e tamanho — confirme a portaria/safra vigente antes de pescar.' },
+  { speciesId: 'bagre_marinho', region: 'BR-RS', type: 'regulada', authority: 'SEMA-RS Resolução 001/2018', note: 'Bagre-marinho (estuarino) com pesca regulada na Lagoa dos Patos, Lago Guaíba e Bacia do Rio Tramandaí (SEMA-RS Res. 001/2018): respeite tamanhos e períodos definidos para o estoque.' },
 ];
 
 // Nota geral de legislação por região (regimes que não cabem em veda por espécie).
@@ -3003,17 +3017,17 @@ const SPECIES_BY_WATERCOURSE = {
   // Espécies entram quando a barra abre ao oceano Atlântico
   lagoon:      ['corvina_negra','corvina_branca','lenguado','lisa','lacha','pejerrey','pescadilla','tararira','bagre','boga','carpa','anguilas','sabalito','austrolebias','rhamdia','corydoras','morena','hoplosternum'],
   // Arroios costeiros com influência estuarina (Solís Grande, Pando, Maldonado, Valizas...)
-  estuario:    ['corvina_branca','corvina_negra','lisa','pejerrey','buricheta','pescadilla','lenguado','lacha','tararira','bagre','dientudo','mojarra','boga','bagre_branco','pachyurus'],
+  estuario:    ['corvina_branca','corvina_negra','lisa','pejerrey','buricheta','pescadilla','lenguado','lacha','tararira','bagre','bagre_marinho','dientudo','mojarra','boga','bagre_branco','pachyurus'],
   // ── RS: Bacia do Jacuí e afluentes (Vacacaí, Santa Maria, Ibicuí, Taquari, Antas...)
   // Fauna representativa: dourado, grumatã, mandi, cará, traíra, piava, pintado
-  rio_jacui:   ['dourado','boga','bagre','tararira','sabalito','patí','surubí','pejerrey','mojarra','crenicichla','gymnogeophagus','pacu','chafalote','rhamdia','bryconamericus','heptapterus','corydoras','hoplosternum'],
+  rio_jacui:   ['dourado','boga','bagre','tararira','sabalito','patí','surubí','pejerrey','mojarra','crenicichla','gymnogeophagus','pacu','chafalote','rhamdia','bryconamericus','heptapterus','corydoras','hoplosternum','tilapia','black_bass','tucunare'],
   // RS: Lagoa dos Patos e canais internos (Guaíba, canal São Gonçalo)
   // Ambiente lagunar de água doce com influência marinha na embocadura
-  lagoa_patos: ['corvina_negra','corvina_branca','tainha','bagre','tararira','boga','sabalito','pejerrey','lisa','lacha','dourado','crenicichla','gymnogeophagus','austrolebias','rhamdia','corydoras','hoplosternum'],
+  lagoa_patos: ['corvina_negra','corvina_branca','tainha','bagre','bagre_marinho','tararira','boga','sabalito','pejerrey','lisa','lacha','dourado','crenicichla','gymnogeophagus','austrolebias','rhamdia','corydoras','hoplosternum','tilapia'],
   // RS: Rio Camaquã e afluentes (Camaquã de Cima, Camaquã do Sul)
-  rio_camaqua:  ['dourado','tararira','boga','bagre','sabalito','crenicichla','gymnogeophagus','austrolebias','bryconamericus','rhamdia','corydoras','hoplosternum'],
+  rio_camaqua:  ['dourado','tararira','boga','bagre','sabalito','crenicichla','gymnogeophagus','austrolebias','bryconamericus','rhamdia','corydoras','hoplosternum','tilapia','black_bass'],
   // RS: Arroios gaúchos (afluentes menores do RS)
-  arroio_rs:    ['tararira','mojarra','boga','bagre','crenicichla','gymnogeophagus','austrolebias','bryconamericus','jenynsia','heptapterus','rhamdia','corydoras','hoplosternum'],
+  arroio_rs:    ['tararira','mojarra','boga','bagre','crenicichla','gymnogeophagus','austrolebias','bryconamericus','jenynsia','heptapterus','rhamdia','corydoras','hoplosternum','tilapia'],
 };
 
 // Espécies com peixes grandes (≥3 kg tipicamente)
@@ -5032,10 +5046,13 @@ function App() {
 
   // União dos tipos de curso selecionados para filtrar espécies disponíveis
   const availableSpecies = useMemo(() => {
-    if (selectedWatercourses.length === 0) return species;
+    // Filtra por país: espécie sem `regions` = compartilhada (UY+BR-RS); exóticos do RS têm regions próprias.
+    const inCountry = (s) => (s.regions || ['UY', 'BR-RS']).includes(selectedCountry);
+    const base = species.filter(inCountry);
+    if (selectedWatercourses.length === 0) return base;
     const allowed = new Set(selectedWatercourses.flatMap((w) => SPECIES_BY_WATERCOURSE[w.type] || []));
-    return species.filter((s) => allowed.has(s.id));
-  }, [selectedWatercourses]);
+    return base.filter((s) => allowed.has(s.id));
+  }, [selectedWatercourses, selectedCountry]);
 
   // Remove espécies selecionadas que não existem em nenhum curso selecionado
   useEffect(() => {
@@ -6778,6 +6795,7 @@ function App() {
                   const badge = isAbsoluta ? { text: 'VEDA ABSOLUTA', color: '#ef4444' }
                     : isActive ? { text: `EM VEDA · ${status.daysLeft}d restantes`, color: '#f97316' }
                     : status?.daysUntil != null ? { text: `COMEÇA EM ${status.daysUntil}d`, color: '#eab308' }
+                    : veda.type === 'regulada' ? { text: 'REGULAMENTADA', color: '#f59e0b' }
                     : { text: 'FORA DA VEDA', color: '#22c55e' };
                   return (
                     <div key={veda.speciesId} style={{ background: bg, border: `1px solid ${border}`, borderRadius: 8, padding: '8px 10px', marginBottom: 8 }}>
