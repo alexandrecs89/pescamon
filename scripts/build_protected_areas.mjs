@@ -1,76 +1,109 @@
 /**
  * build_protected_areas.mjs — Áreas de preservação (Unidades de Conservação)
  *
- * Converte os GeoJSON oficiais baixados em .uc_tmp/ no formato do app
- * (public/protected_areas_<uf>.json), carregado por país/região — mesmo padrão
- * escalável da hidrografia. Para novas regiões: baixar o geojson oficial + rodar.
+ * Converte o shapefile oficial do CNUC (MMA — todas as esferas: federal, estadual,
+ * municipal) no formato do app (public/protected_areas_<uf>.json), carregado por
+ * país/região. Mesmo padrão escalável da hidrografia. Para outras regiões: filtrar
+ * por UF/esfera e gerar.
  *
- * Fonte RS (federais): ICMBio via INDE (WFS `ICMBio:limiteucsfederais_a`),
- *   filtrado por `ufabrang LIKE '%RS%'`. Estaduais: SEMA-RS (a acrescentar).
+ * Fonte: CNUC (dados.mma.gov.br) — shapefile `cnuc_<aaaa_mm>.shp` em .uc_tmp/cnuc/
+ *   CRS SIRGAS 2000 (≈ WGS84). Filtra RS (uf contém "RIO GRANDE DO SUL") e Ativo.
  *
- * Saída por área: { id, name, category(sigla), group(PI|US), esfera, authority,
- *   areaHa, center:[lat,lon], rings: [ [ [lat,lon], ... ], ... ] }
+ * Saída por área: { id, name, category(código), categoryName, group(PI|US), esfera,
+ *   authority, areaHa, center:[lat,lon], rings: [ [ [lat,lon], ... ], ... ] }
  *
  * Uso: node scripts/build_protected_areas.mjs
  */
 import * as turf from '@turf/turf';
-import { readFileSync, writeFileSync, existsSync } from 'node:fs';
+import * as shapefile from 'shapefile';
+import { writeFileSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
-const TMP = join(ROOT, '.uc_tmp');
+const SHP = join(ROOT, '.uc_tmp', 'cnuc', 'cnuc_2025_08.shp');
+const DBF = join(ROOT, '.uc_tmp', 'cnuc', 'cnuc_2025_08.dbf');
+const UF_ALVO = 'RIO GRANDE DO SUL';
 
-function slug(s) {
-  return s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
-    .replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '').slice(0, 48);
+// categoria (texto CNUC) → código normalizado do app
+function categoryCode(categoria) {
+  const c = (categoria || '').toLowerCase();
+  if (c.includes('parque')) return 'PARQUE';
+  if (c.includes('estação ecológica') || c.includes('estacao ecologica')) return 'ESEC';
+  if (c.includes('reserva biológica') || c.includes('reserva biologica')) return 'REBIO';
+  if (c.includes('refúgio') || c.includes('refugio')) return 'REVIS';
+  if (c.includes('monumento')) return 'MONA';
+  if (c.includes('proteção ambiental') || c.includes('protecao ambiental')) return 'APA';
+  if (c.includes('relevante interesse')) return 'ARIE';
+  if (c.includes('floresta')) return 'FLORESTA';
+  if (c.includes('extrativista')) return 'RESEX';
+  if (c.includes('desenvolvimento sustentável') || c.includes('desenvolvimento sustentavel')) return 'RDS';
+  if (c.includes('particular')) return 'RPPN';
+  return 'UC';
 }
 
-// Converte uma feição UC (MultiPolygon, [lon,lat]) → objeto do app
-function convertFeature(f) {
+function slug(s) {
+  return (s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '').slice(0, 52);
+}
+
+function convert(f) {
   const p = f.properties;
   let geom = f.geometry;
-  // Simplificar geometrias densas (cânions etc.) — tolerância ~200 m
-  try { geom = turf.simplify(turf.feature(geom), { tolerance: 0.002, highQuality: true }).geometry; } catch {}
-  const polys = geom.type === 'MultiPolygon' ? geom.coordinates : [geom.coordinates];
-  // anel externo de cada polígono, em [lat,lon]
+  if (!geom) return null;
+  try { geom = turf.simplify(turf.feature(geom), { tolerance: 0.0015, highQuality: true }).geometry; } catch {}
+  const polys = geom.type === 'MultiPolygon' ? geom.coordinates : geom.type === 'Polygon' ? [geom.coordinates] : [];
   const rings = polys
     .map(poly => poly[0])
     .filter(r => r && r.length >= 4)
-    .map(r => r.map(([lon, lat]) => [lat, lon]));
+    .map(r => r.map(([lon, lat]) => [+lat.toFixed(5), +lon.toFixed(5)]));
   if (!rings.length) return null;
-  // centro = centroide do maior anel
   const big = rings.reduce((a, b) => (b.length > a.length ? b : a), rings[0]);
-  const c = big.reduce((s, [la, lo]) => [s[0] + la, s[1] + lo], [0, 0]).map(v => v / big.length);
+  const ctr = big.reduce((s, [la, lo]) => [s[0] + la, s[1] + lo], [0, 0]).map(v => v / big.length);
+  const group = /integral/i.test(p.grupo || '') ? 'PI' : 'US';
+  const ha = parseFloat(p.ha_total);
   return {
-    id: 'uc-fed-' + slug(p.nomeuc),
-    name: p.nomeuc.replace(/\s+/g, ' ').trim(),
-    category: p.siglacateg || 'UC',
-    group: p.grupouc || null,            // PI = Proteção Integral, US = Uso Sustentável
-    esfera: p.esferaadm || 'Federal',
-    authority: p.criacaoato || null,
-    areaHa: p.areahaalb ? Math.round(p.areahaalb) : null,
-    ufabrang: p.ufabrang || null,
-    center: [+c[0].toFixed(5), +c[1].toFixed(5)],
+    id: 'uc-' + slug(p.cd_cnuc || p.nome_uc),
+    name: (p.nome_uc || 'Unidade de Conservação').replace(/\s+/g, ' ').trim(),
+    category: categoryCode(p.categoria),
+    categoryName: p.categoria || null,
+    group,
+    esfera: p.esfera || null,
+    authority: p.cria_ato && p.cria_ato !== 'Sem informação' ? p.cria_ato : null,
+    areaHa: Number.isFinite(ha) && ha > 0 ? Math.round(ha) : null,
+    center: [+ctr[0].toFixed(5), +ctr[1].toFixed(5)],
     rings,
   };
 }
 
-function build() {
+async function build() {
+  if (!existsSync(SHP)) { console.error(`Shapefile não encontrado: ${SHP}`); process.exit(1); }
+  const src = await shapefile.open(SHP, DBF, { encoding: 'utf-8' });
   const out = [];
-  const fedPath = join(TMP, 'uc_federais_rs.geojson');
-  if (existsSync(fedPath)) {
-    const fc = JSON.parse(readFileSync(fedPath, 'utf8'));
-    for (const f of fc.features) { const o = convertFeature(f); if (o) out.push(o); }
-    console.log(`Federais (ICMBio): ${fc.features.length} → ${out.length} áreas`);
+  let total = 0, rs = 0;
+  let res = await src.read();
+  while (!res.done) {
+    total++;
+    const p = res.value.properties;
+    if ((p.uf || '').includes(UF_ALVO) && p.situacao === 'Ativo') {
+      rs++;
+      const o = convert(res.value);
+      if (o) out.push(o);
+    }
+    res = await src.read();
   }
-  // (estaduais SEMA-RS: acrescentar aqui quando disponíveis)
+  // ordenar por esfera (Federal, Estadual, Municipal) e nome
+  const ordEsf = { Federal: 0, Estadual: 1, Municipal: 2 };
+  out.sort((a, b) => (ordEsf[a.esfera] - ordEsf[b.esfera]) || a.name.localeCompare(b.name));
 
   const vert = out.reduce((s, a) => s + a.rings.reduce((t, r) => t + r.length, 0), 0);
-  const f = join(ROOT, 'public', 'protected_areas_rs.json');
-  writeFileSync(f, JSON.stringify(out));
-  console.log(`OK -> public/protected_areas_rs.json | ${out.length} áreas, ${vert} vértices`);
-  out.forEach(a => console.log(`   [${a.category}/${a.group}] ${a.name} — ${a.areaHa} ha`));
+  writeFileSync(join(ROOT, 'public', 'protected_areas_rs.json'), JSON.stringify(out));
+  const byEsf = out.reduce((a, x) => ((a[x.esfera] = (a[x.esfera] || 0) + 1), a), {});
+  const byCat = out.reduce((a, x) => ((a[x.category] = (a[x.category] || 0) + 1), a), {});
+  console.log(`CNUC: ${total} UCs no país | RS ativas: ${rs} → ${out.length} áreas, ${vert} vértices`);
+  console.log('  por esfera:', JSON.stringify(byEsf));
+  console.log('  por categoria:', JSON.stringify(byCat));
+  console.log('OK -> public/protected_areas_rs.json');
 }
 
-build();
+build().catch(e => { console.error('ERRO', e.message); process.exit(1); });

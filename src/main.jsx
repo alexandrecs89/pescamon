@@ -389,8 +389,19 @@ function SpotClickHandler({ onRightClick }) {
   return null;
 }
 
-function MapController({ focusedCell, mapBounds }) {
+function MapController({ focusedCell, mapBounds, country }) {
   const map = useMap();
+  // Recentraliza o mapa ao trocar de país (a prop `center` do MapContainer é só inicial).
+  const firstCountry = useRef(true);
+  useEffect(() => {
+    if (!country) return;
+    const c = COUNTRIES.find(x => x.id === country);
+    if (!c?.center) return;
+    const center = [c.center.latitude, c.center.longitude];
+    const zoom = c.defaultZoom || map.getZoom();
+    if (firstCountry.current) { firstCountry.current = false; map.setView(center, zoom, { animate: false }); }
+    else { map.flyTo(center, zoom, { duration: 1.0 }); }
+  }, [country, map]);
   useEffect(() => {
     if (!focusedCell) return;
     // Suporte a { center, zoom } para navegar por região
@@ -6033,7 +6044,7 @@ function App() {
           </div>
           <MapContainer center={mapCenter} zoom={mapZoom} scrollWheelZoom className="map" style={{ height: '100%' }}>
           {console.log('[DEBUG] MapContainer render - mapCenter:', mapCenter, 'mapZoom:', mapZoom)}
-          <MapController focusedCell={focusedCell} mapBounds={mapBounds} />
+          <MapController focusedCell={focusedCell} mapBounds={mapBounds} country={selectedCountry} />
           {theme === 'light'
             ? <TileLayer attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/">CARTO</a>' url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png" />
             : <TileLayer attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>' url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
@@ -6138,14 +6149,14 @@ function App() {
               Polígonos multi-anel; cor/ícone por categoria; nota de pesca por grupo (PI/US). */}
           {showSnapAreas && protectedAreas.map(area => {
             const UC_CAT = {
-              PARNA: { color: '#16a34a', icon: '🏞️', label: 'Parque Nacional' },
+              PARQUE: { color: '#16a34a', icon: '🏞️', label: 'Parque' },
               REBIO: { color: '#15803d', icon: '🌳', label: 'Reserva Biológica' },
               ESEC:  { color: '#0d9488', icon: '🔬', label: 'Estação Ecológica' },
               REVIS: { color: '#a855f7', icon: '🦌', label: 'Refúgio de Vida Silvestre' },
               MONA:  { color: '#9333ea', icon: '🪨', label: 'Monumento Natural' },
               APA:   { color: '#0ea5e9', icon: '🌿', label: 'Área de Proteção Ambiental' },
               ARIE:  { color: '#22d3ee', icon: '🌱', label: 'Área de Relevante Interesse Ecológico' },
-              FLONA: { color: '#ca8a04', icon: '🌲', label: 'Floresta Nacional' },
+              FLORESTA: { color: '#ca8a04', icon: '🌲', label: 'Floresta' },
               RESEX: { color: '#f59e0b', icon: '🛶', label: 'Reserva Extrativista' },
               RDS:   { color: '#eab308', icon: '🌾', label: 'Reserva de Desenvolvimento Sustentável' },
               RPPN:  { color: '#84cc16', icon: '🌿', label: 'Reserva Particular (RPPN)' },
@@ -6795,14 +6806,14 @@ function App() {
               reserva_recursos:  { color: '#06b6d4', icon: '💧', label: 'Reserva de Recursos' },
             };
             const ucCfg = {
-              PARNA: { color: '#16a34a', icon: '🏞️', label: 'Parque Nacional' },
+              PARQUE: { color: '#16a34a', icon: '🏞️', label: 'Parque' },
               REBIO: { color: '#15803d', icon: '🌳', label: 'Reserva Biológica' },
               ESEC:  { color: '#0d9488', icon: '🔬', label: 'Estação Ecológica' },
               REVIS: { color: '#a855f7', icon: '🦌', label: 'Refúgio de Vida Silvestre' },
               MONA:  { color: '#9333ea', icon: '🪨', label: 'Monumento Natural' },
               APA:   { color: '#0ea5e9', icon: '🌿', label: 'Área de Proteção Ambiental' },
               ARIE:  { color: '#22d3ee', icon: '🌱', label: 'Área de Relevante Interesse Ecológico' },
-              FLONA: { color: '#ca8a04', icon: '🌲', label: 'Floresta Nacional' },
+              FLORESTA: { color: '#ca8a04', icon: '🌲', label: 'Floresta' },
               RESEX: { color: '#f59e0b', icon: '🛶', label: 'Reserva Extrativista' },
               RDS:   { color: '#eab308', icon: '🌾', label: 'Reserva de Desenvolvimento Sustentável' },
               RPPN:  { color: '#84cc16', icon: '🌿', label: 'Reserva Particular (RPPN)' },
