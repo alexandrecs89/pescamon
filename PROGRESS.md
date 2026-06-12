@@ -1,7 +1,22 @@
 # Pescamon - Progresso do Projeto
 
-**Data da última sessão:** 28 de maio de 2026  
-**Status:** Plano Premium implementado e funcionando! 🎉
+**Data da última sessão:** 12 de junho de 2026  
+**Status:** Hidrografia oficial (RS + UY) + conformidade legal + seletor geográfico no mapa. Expansão para SC em andamento. 🗺️
+
+> Para a descrição completa de funcionalidades, ver o **README.md** (mantido alinhado). Este arquivo foca no histórico de sessões e nos detalhes operacionais (Stripe, Edge Functions, como retomar).
+
+---
+
+## 🗺️ Sessões recentes (jun/2026) — dados oficiais e expansão
+
+- **Hidrografia oficial RS** (ANA BHO 2017): 43.522 trechos classificados por fluxo em 4 bacias, recortados à fronteira IBGE; render estável por pool de canvas por bacia. Scripts `build_rs_boundary.mjs` + `build_rs_hydrography.mjs`.
+- **Hidrografia oficial UY** (DINAGUA WFS): cursos `c257` + cuencas Nível 1 `c097` → 6 bacias; substitui o MVP do Rio Santa Lucía. Scripts `build_uy_boundary.mjs` + `build_uy_hydrography.mjs`.
+- **Conformidade legal ciente de região**: 101 UCs do CNUC/MMA no RS (`build_protected_areas.mjs` → `protected_areas_rs.json`) + 21 áreas SNAP do UY; vedas/defeso por região (`VEDAS` com campo `region`; `FISHING_LAW_NOTE`).
+- **Catálogo de espécies ciente de país** (50 espécies): exóticos do RS só no Brasil; vedas granulares por espécie (piracema IBAMA IN 193/2008; tainha/bagre regulados).
+- **Seletor geográfico no mapa** (`<GeoPicker>`): mundo → país → estado; Brasil e Uruguai clicáveis; 27 estados do Brasil desenhados (RS clicável). Dados via `build_br_geo.mjs` (`br_boundary.json`, `br_states.json`). Lembra a última região.
+- **Em andamento:** expansão para **Santa Catarina (BR-SC)** seguindo `docs/EXPANSAO-ESTADOS.md` (fronteira IBGE codarea 42 → hidrografia BHO → UCs CNUC → legislação → espécies → habilitar no seletor).
+
+Branch de trabalho: `feat/hidrografia-oficial-areas-protegidas` (PR #1).
 
 ---
 
@@ -69,30 +84,21 @@
 
 ## 📋 Próximos Passos (Pendentes)
 
-### Alta Prioridade
-1. **Expansão Geográfica**
-   - Argentina: Río Paraná (Corrientes, Entre Ríos), baixo Río Uruguay
-   - Brasil RS: Lagoa dos Patos, Jacuí, Camaquã
-   - Espécies regionais (Dorado, Surubí, Pacú, Manguruyú)
+> Roadmap detalhado no **README.md** (seção "Próximos passos").
 
-2. **Integrações Oficiais**
-   - Dados de qualidade da água DINAMA/MVOTMA
+### Alta Prioridade — escalar territorialmente
+1. **Generalizar os scripts e o app** antes de fechar o 2º estado (remover hardcode "RS": `isPointInRS`, parâmetros de bacia/Strahler) → `build_boundary.mjs <uf>` / `build_hydrography.mjs <uf>` (ver `docs/EXPANSAO-ESTADOS.md` §8).
+2. **Santa Catarina (BR-SC)** — estado-piloto da nova esteira (EM ANDAMENTO).
+3. **Áreas do Uruguai no modelo region-aware** (`protected_areas_uy.json`).
 
 ### Média Prioridade
-3. **App Nativo**
-   - Capacitor (wrapper PWA) ou React Native
-   - Push nativo, câmera nativa, offline completo
-
-4. **i18n Pendências**
-   - Localizar labels fixos em PT nos popups do mapa
-
-5. **Pescademia**
-   - Progresso de vídeo para Vimeo e Twitch
+4. **Bug**: acúmulo de rios ao trocar de país rapidamente (cancelar fetches em voo).
+5. **Argentina**: Río Paraná / baixo Uruguay (IGN/INA ou HydroSHEDS fallback).
+6. **API pública** para pesquisadores (OpenAPI via Edge Functions).
+7. **App nativo** (Capacitor / React Native).
 
 ### Baixa Prioridade
-6. **Loja de Equipamentos**
-7. **Notificações Push (completo)**
-8. **Integração IoT (sensores reais)**
+8. **Login social Apple**, localizar UI admin, LSTM, IoT ESP32, Strava/Komoot.
 
 ---
 
@@ -200,7 +206,7 @@ VITE_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIs...
 
 ---
 
-**Última atualização:** 28/05/2026 por Alexandre  
-**Status:** 🟢 Sistema de pagamento 100% operacional
+**Última atualização:** 12/06/2026 por Alexandre  
+**Status:** 🟢 Pagamento operacional · 🗺️ Dados oficiais RS+UY · 🚧 Expansão SC em andamento
 
 🎣 **Pescamon - A inteligência artificial da pesca!**
