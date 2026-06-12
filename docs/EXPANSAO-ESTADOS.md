@@ -237,9 +237,16 @@ trecho**. Isso não escala de graça. Lições já aplicadas em `main.jsx` (mant
 - [ ] `public/trib_manifest.json`: adicionar a chave `"BR-SC": [ { file, regionId,
       baseRegionId }, ... ]`.
 
-**Seletor de país**
-- [ ] Já há item "Brasil — Santa Catarina" com selo "Em breve"; remover o selo /
-      habilitar quando `available: true`.
+**Seletor geográfico (mapa país→estado)**
+- [ ] O seletor (`<GeoPicker>` em `src/main.jsx`) é alimentado por `public/br_states.json`
+      (gerado por `scripts/build_br_geo.mjs` a partir da malha IBGE de UFs). Para tornar
+      um estado **clicável/navegável**: em `build_br_geo.mjs`, adicionar o `codarea` ao
+      mapa `AVAILABLE` (ex.: `'42': 'BR-SC'`) e rodar `node scripts/build_br_geo.mjs`
+      (regenera `br_states.json` com `available:true` e `regionId` certo). Estados fora
+      do `AVAILABLE` aparecem desenhados, esmaecidos, com aviso "Em breve" ao clicar.
+- [ ] `COUNTRIES` ainda guarda bbox/centro/zoom por região (usado na navegação pós-seleção);
+      manter a entrada do estado coerente. A silhueta nacional (`br_boundary.json`) e o
+      contorno do estado vêm dos dados — não precisam de código novo.
 
 ---
 

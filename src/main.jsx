@@ -1,7 +1,7 @@
 import React, { useCallback, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore, lazy, Suspense, createContext } from 'react';
 import { createRoot } from 'react-dom/client';
 import { CircleMarker, MapContainer, Marker, Polygon, Polyline, Popup, TileLayer, useMapEvents, useMap } from 'react-leaflet';
-import { Activity, AlertTriangle, Anchor, BarChart3, Link, Bell, BellOff, Calendar, Check, ChevronDown, ChevronUp, Clock, Cloud, CloudOff, Crosshair, Droplets, Download, Fish, Flag, GitCompare, GripVertical, LogIn, LogOut, MapPin, MapPinned, MessageCircle, Moon, Package, Plus, RefreshCw, Search, Settings, Share2, Sprout, Sun, ThermometerSun, Trophy, Upload, User, Users, Waves, Wind, X, Zap } from 'lucide-react';
+import { Activity, AlertTriangle, Anchor, BarChart3, Link, Bell, BellOff, Calendar, Check, ChevronDown, ChevronUp, Clock, Cloud, CloudOff, Crosshair, Droplets, Download, Fish, Flag, GitCompare, Globe, GripVertical, LogIn, LogOut, MapPin, MapPinned, MessageCircle, Moon, Package, Plus, RefreshCw, Search, Settings, Share2, Sprout, Sun, ThermometerSun, Trophy, Upload, User, Users, Waves, Wind, X, Zap } from 'lucide-react';
 import TrendChart from './TrendChart.jsx';
 import FishIcon from './FishIcon.jsx';
 import { usePushNotifications } from './usePushNotifications.js';
@@ -422,6 +422,169 @@ function MapController({ focusedCell, mapBounds, country }) {
     map.flyToBounds([mapBounds.sw, mapBounds.ne], { padding: [40, 40], duration: 1.2, maxZoom: 14 });
   }, [mapBounds, map]);
   return null;
+}
+
+// ── Seletor geográfico hierárquico (mundo → país → estado) ───────────────────
+// Reenquadra o mapa do seletor ao trocar de nível. `bounds` = [[minLat,minLon],[maxLat,maxLon]].
+function GeoPickerFit({ bounds }) {
+  const map = useMap();
+  const key = bounds ? bounds.flat().join(',') : '';
+  useEffect(() => {
+    if (!bounds) return;
+    const id = setTimeout(() => {
+      try { map.invalidateSize(); map.fitBounds(bounds, { padding: [40, 40], animate: true }); } catch {}
+    }, 120);
+    return () => clearTimeout(id);
+  }, [key]); // eslint-disable-line
+  return null;
+}
+
+// Desenha uma região clicável (país ou estado) — um <Polygon> por anel (ilhas viram polígonos próprios).
+function PickRegion({ rings, color, fillColor, fillOpacity, weight, dashArray, label, interactive = true, onClick, onHover }) {
+  if (!rings || !rings.length) return null;
+  return rings.map((ring, i) => (
+    <Polygon
+      key={i}
+      positions={ring}
+      pathOptions={{ color, weight, fillColor, fillOpacity, dashArray }}
+      interactive={interactive}
+      eventHandlers={interactive ? {
+        click: onClick,
+        mouseover: (e) => { onHover?.(label); try { e.target.setStyle({ fillOpacity: Math.min(0.6, fillOpacity + 0.25), weight: weight + 1 }); } catch {} },
+        mouseout: (e) => { onHover?.(null); try { e.target.setStyle({ fillOpacity, weight }); } catch {} },
+      } : undefined}
+    />
+  ));
+}
+
+function GeoPicker({ theme, onSelect, onClose }) {
+  const [level, setLevel] = useState('world');
+  const [brStates, setBrStates] = useState(null);
+  const [brBoundary, setBrBoundary] = useState(null);
+  const [uyRings, setUyRings] = useState(() => getBoundaryRings('UY'));
+  const [hover, setHover] = useState(null);
+  const [notice, setNotice] = useState(null);
+
+  useEffect(() => {
+    fetch('/br_states.json').then(r => r.json()).then(d => setBrStates(d.states || [])).catch(() => {});
+    fetch('/br_boundary.json').then(r => r.json()).then(d => setBrBoundary(d.rings || [])).catch(() => {});
+    if (!uyRings) loadBoundary('UY').then(r => r && setUyRings(r));
+  }, []); // eslint-disable-line
+
+  // Caixa envolvente [[minLat,minLon],[maxLat,maxLon]] de uma lista de conjuntos de anéis.
+  const boundsOf = (ringsList) => {
+    let minLat = 99, maxLat = -99, minLon = 999, maxLon = -999, any = false;
+    (ringsList || []).forEach(rs => rs && rs.forEach(r => r.forEach(([la, lo]) => {
+      any = true;
+      if (la < minLat) minLat = la; if (la > maxLat) maxLat = la;
+      if (lo < minLon) minLon = lo; if (lo > maxLon) maxLon = lo;
+    })));
+    return any ? [[minLat, minLon], [maxLat, maxLon]] : null;
+  };
+  // Só enquadra quando os dados do nível estão prontos (evita um fit prematuro só-Uruguai).
+  const worldBounds = useMemo(() => (brBoundary && uyRings) ? boundsOf([brBoundary, uyRings]) : null, [brBoundary, uyRings]);
+  const brBounds = useMemo(() => brBoundary ? boundsOf([brBoundary]) : null, [brBoundary]);
+  const fitBoundsTarget = level === 'world' ? worldBounds : brBounds;
+
+  useEffect(() => {
+    if (!notice) return;
+    const t = setTimeout(() => setNotice(null), 2200);
+    return () => clearTimeout(t);
+  }, [notice]);
+
+  const onPickState = (st) => {
+    if (st.available) onSelect(st.regionId);
+    else { setNotice(`${st.name} — em breve`); setHover(null); }
+  };
+
+  return (
+    <div style={{
+      position: 'fixed', inset: 0, zIndex: 5000, display: 'flex', flexDirection: 'column',
+      background: 'var(--bg-surface)',
+    }}>
+      {/* Cabeçalho */}
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px',
+        borderBottom: '1px solid var(--border-faint2)', background: 'var(--bg-card)', flexShrink: 0,
+      }}>
+        {level === 'BR' && (
+          <button type="button" onClick={() => { setLevel('world'); setHover(null); }}
+            style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '5px 10px', borderRadius: 6,
+              border: '1px solid var(--border-faint2)', background: 'var(--bg-card2)', color: 'var(--text-primary)',
+              cursor: 'pointer', fontSize: '0.82rem', fontWeight: 600 }}>
+            ← Voltar
+          </button>
+        )}
+        <div style={{ display: 'flex', flexDirection: 'column' }}>
+          <strong style={{ fontSize: '1rem', color: 'var(--text-primary)' }}>
+            {level === 'world' ? '🌎 Escolha o país' : '📍 Escolha o estado'}
+          </strong>
+          <span style={{ fontSize: '0.75rem', color: 'var(--text-dim)' }}>
+            {level === 'world'
+              ? 'Clique no Brasil ou no Uruguai no mapa'
+              : 'Clique num estado destacado para começar'}
+          </span>
+        </div>
+        <div style={{ flex: 1 }} />
+        {hover && (
+          <span style={{ fontSize: '0.9rem', fontWeight: 700, color: '#3b82f6' }}>{hover}</span>
+        )}
+        <button type="button" onClick={onClose} title="Fechar"
+          style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 32, height: 32,
+            borderRadius: 6, border: '1px solid var(--border-faint2)', background: 'var(--bg-card2)',
+            color: 'var(--text-primary)', cursor: 'pointer' }}>
+          <X size={16} />
+        </button>
+      </div>
+
+      {/* Mapa do seletor */}
+      <div style={{ position: 'relative', flex: 1, minHeight: 0 }}>
+        <MapContainer center={[-22, -52]} zoom={4} scrollWheelZoom style={{ height: '100%', width: '100%' }}>
+          {theme === 'light'
+            ? <TileLayer attribution='&copy; OpenStreetMap &copy; CARTO' url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png" />
+            : <TileLayer attribution='&copy; OpenStreetMap' url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png" />
+          }
+          <GeoPickerFit bounds={fitBoundsTarget} />
+
+          {level === 'world' && (
+            <>
+              <PickRegion rings={brBoundary} label="Brasil" color="#16a34a" fillColor="#16a34a" fillOpacity={0.28} weight={2}
+                onHover={setHover} onClick={() => { setHover(null); setLevel('BR'); }} />
+              <PickRegion rings={uyRings} label="Uruguai" color="#3b82f6" fillColor="#3b82f6" fillOpacity={0.28} weight={2}
+                onHover={setHover} onClick={() => onSelect('UY')} />
+            </>
+          )}
+
+          {level === 'BR' && (
+            <>
+              {/* Silhueta nacional suave ao fundo */}
+              <PickRegion rings={brBoundary} color="#64748b" fillColor="#64748b" fillOpacity={0.04} weight={1} interactive={false} />
+              {(brStates || []).map(st => (
+                <PickRegion key={st.uf} rings={st.rings} label={st.name}
+                  color={st.available ? '#22c55e' : '#94a3b8'}
+                  fillColor={st.available ? '#22c55e' : '#64748b'}
+                  fillOpacity={st.available ? 0.38 : 0.12}
+                  weight={st.available ? 2.5 : 1}
+                  dashArray={st.available ? null : '4 4'}
+                  onHover={setHover} onClick={() => onPickState(st)} />
+              ))}
+            </>
+          )}
+        </MapContainer>
+
+        {/* Aviso "Em breve" */}
+        {notice && (
+          <div style={{
+            position: 'absolute', bottom: 24, left: '50%', transform: 'translateX(-50%)', zIndex: 1000,
+            background: 'rgba(15,23,42,0.92)', color: '#fde68a', padding: '8px 16px', borderRadius: 8,
+            border: '1px solid rgba(253,230,138,0.4)', fontSize: '0.85rem', fontWeight: 600, whiteSpace: 'nowrap',
+          }}>
+            ⏳ {notice}
+          </div>
+        )}
+      </div>
+    </div>
+  );
 }
 
 const fallbackScenarios = [
@@ -4175,7 +4338,16 @@ function App() {
   const [watercourseSearch, setWatercourseSearch] = useState('');
   const [selectedRegion, setSelectedRegion] = useState(null);
   const [selectedCountry, setSelectedCountry] = useState(() => loadSavedCountry() || 'UY');
-  const [countryDropdownOpen, setCountryDropdownOpen] = useState(false);
+  // Seletor geográfico (mapa país→estado). Abre só quando não há região salva.
+  const [pickerOpen, setPickerOpen] = useState(() => !loadSavedCountry());
+  const handlePickRegion = useCallback((regionId) => {
+    setSelectedCountry(regionId);
+    saveCountry(regionId);
+    setSelectedWatercourseIds([]);
+    setSelectedRegion(null);
+    setActiveBasins(new Set());
+    setPickerOpen(false);
+  }, []);
   const [userLocation, setUserLocation] = useState(null);
   const [mapCenter, setMapCenter] = useState([-34.735, -56.275]);
   const [mapZoom] = useState(8);
@@ -5367,6 +5539,9 @@ function App() {
 
   return (
     <>
+    {pickerOpen && (
+      <GeoPicker theme={theme} onSelect={handlePickRegion} onClose={() => setPickerOpen(false)} />
+    )}
     <header className="topbar">
       <div className="topbar-brand">
         <img src="/logo.png" alt="Pescamon" className="topbar-logo" />
@@ -5439,17 +5614,17 @@ function App() {
             🌊 Ambiental
           </button>
         )}
-        {/* Seletor de país */}
+        {/* Seletor de região — abre o mapa de seleção (país → estado) */}
         <div style={{ position: 'relative', marginRight: 8 }}>
           <button
             type="button"
-            onClick={() => setCountryDropdownOpen(v => !v)}
-            title="Selecionar país"
+            onClick={() => setPickerOpen(true)}
+            title="Trocar região"
             style={{
               display: 'flex', alignItems: 'center', gap: 5,
               padding: '4px 9px', borderRadius: 6,
               border: '1px solid var(--border-faint2)',
-              background: countryDropdownOpen ? 'rgba(59,130,246,0.15)' : 'var(--bg-card2)',
+              background: 'var(--bg-card2)',
               color: 'var(--text-primary)', cursor: 'pointer', fontSize: '0.82rem', fontWeight: 600,
             }}
           >
@@ -5461,53 +5636,8 @@ function App() {
             <span style={{ fontSize: '0.78rem' }}>
               {COUNTRIES.find(c => c.id === selectedCountry)?.name}
             </span>
-            <ChevronDown size={11} style={{ opacity: 0.6, transform: countryDropdownOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.15s' }} />
+            <Globe size={12} style={{ opacity: 0.6 }} />
           </button>
-          {countryDropdownOpen && (
-            <div style={{
-              position: 'absolute', top: 'calc(100% + 6px)', right: 0, zIndex: 9999,
-              background: 'var(--bg-surface)', border: '1px solid var(--border-faint2)', borderRadius: 8,
-              overflow: 'hidden', boxShadow: 'var(--shadow-modal)', minWidth: 170,
-            }}>
-              {COUNTRIES.map(c => {
-                const isActive = c.id === selectedCountry;
-                return (
-                  <button
-                    key={c.id}
-                    type="button"
-                    disabled={!c.available}
-                    onClick={() => {
-                      if (!c.available) return;
-                      setSelectedCountry(c.id);
-                      saveCountry(c.id);
-                      setCountryDropdownOpen(false);
-                      setSelectedWatercourseIds([]);
-                      setSelectedRegion(null);
-                      setActiveBasins(new Set());
-                    }}
-                    style={{
-                      width: '100%', display: 'flex', alignItems: 'center', gap: 9,
-                      padding: '9px 12px',
-                      background: isActive ? 'rgba(59,130,246,0.18)' : 'transparent',
-                      border: 'none', borderBottom: '1px solid var(--border-faint)',
-                      color: !c.available ? 'var(--text-dimmer)' : isActive ? '#60a5fa' : 'var(--text-primary)',
-                      cursor: c.available ? 'pointer' : 'not-allowed', textAlign: 'left',
-                    }}
-                  >
-                    <img src={c.flagUrl} alt={c.id} style={{ width: 24, height: 17, borderRadius: 2, objectFit: 'cover', flexShrink: 0 }} />
-                    <span style={{ flex: 1, fontSize: '0.85rem', fontWeight: isActive ? 700 : 400 }}>{c.name}</span>
-                    {isActive && <span style={{ fontSize: '0.68rem', color: '#3b82f6' }}>✓</span>}
-                    {!c.available && (
-                      <span style={{
-                        fontSize: '0.62rem', background: 'var(--bg-card2)', color: 'var(--text-dim)',
-                        padding: '2px 5px', borderRadius: 3, border: '1px solid var(--border-faint2)', whiteSpace: 'nowrap',
-                      }}>Em breve</span>
-                    )}
-                  </button>
-                );
-              })}
-            </div>
-          )}
         </div>
 
         {/* Seletor de idioma — dropdown */}
