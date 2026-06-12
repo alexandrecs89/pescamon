@@ -2688,11 +2688,34 @@ const VEDAS = [
     authority: 'CARU Res. 59/12',
     note: 'Veda absoluta permanente para todas as espécies de armado no Río Uruguay: Pterodoras granulosus, Oxydoras kneri, Rhinodoras dorbignyi e Megalodoras laevigatulus. Devolver imediatamente ao rio.',
   },
+
+  // ── RS (BR-RS) — Piracema/defeso. Datas exatas são fixadas por portaria ANUAL;
+  // confirme a portaria vigente da temporada. (region: 'BR-RS') ───────────────
+  {
+    speciesId: 'dourado', region: 'BR-RS',
+    type: 'piracema',
+    period: { start: [10, 1], end: [1, 31] },
+    authority: 'IBAMA IN 193/2008 (Bacia do Rio Uruguai)',
+    note: 'Piracema na Bacia do Rio Uruguai: defeso de ~1°/out a 31/jan (confirme a portaria da temporada). Dourado proibido no período. Permitido apenas linha de mão ou vara/caniço com linha e anzol — 1 petrecho por pescador, embarcação não motorizada. Recomenda-se pesque-e-solte o ano todo.',
+  },
+  {
+    speciesId: 'surubí', region: 'BR-RS',
+    type: 'piracema',
+    period: { start: [10, 1], end: [1, 31] },
+    authority: 'IBAMA IN 193/2008 (Bacia do Rio Uruguai)',
+    note: 'Piracema na Bacia do Rio Uruguai: defeso de ~1°/out a 31/jan (confirme a portaria da temporada). Surubim/pintado proibido no período. Só linha de mão ou vara/anzol, 1 petrecho, barco não motorizado.',
+  },
 ];
 
-// Retorna o status de veda de uma espécie para uma data
-function getVedaStatus(speciesId, date = new Date()) {
-  const vedas = VEDAS.filter(v => v.speciesId === speciesId);
+// Nota geral de legislação por região (regimes que não cabem em veda por espécie).
+const FISHING_LAW_NOTE = {
+  'BR-RS': 'No RS há regimes distintos por bacia: Piracema na Bacia do Rio Uruguai (~out–jan, IBAMA IN 193/2008) e defeso na Lagoa dos Patos/Guaíba acima de Arambaré (~nov–jan, IBAMA IN 197/2008). Tainha é sobre-explotada (MMA IN 5/2004) e o bagre tem regramento próprio (SEMA-RS Resolução 001/2018). Datas exatas mudam por portaria anual — confirme sempre a vigente antes de pescar.',
+  'UY': 'Calendário baseado em CARU Res. 59/12 e DINARA Decreto 149/997. Verifique sempre a legislação vigente.',
+};
+
+// Retorna o status de veda de uma espécie para uma data (na jurisdição da região)
+function getVedaStatus(speciesId, date = new Date(), region = 'UY') {
+  const vedas = VEDAS.filter(v => v.speciesId === speciesId && (v.region || 'UY') === region);
   if (!vedas.length) return null;
 
   const absVeda = vedas.find(v => v.type === 'absoluta');
@@ -2736,10 +2759,10 @@ function getVedaStatus(speciesId, date = new Date()) {
 }
 
 // Retorna todas as vedas com status atual, para o card calendário
-function getVedasAtivas(date = new Date()) {
-  return VEDAS.map(veda => {
+function getVedasAtivas(date = new Date(), region = 'UY') {
+  return VEDAS.filter(v => (v.region || 'UY') === region).map(veda => {
     const sp = species.find(s => s.id === veda.speciesId);
-    const status = getVedaStatus(veda.speciesId, date);
+    const status = getVedaStatus(veda.speciesId, date, region);
     return { veda, sp, status };
   }).filter(({ sp }) => sp);
 }
@@ -3814,7 +3837,7 @@ function PlannerFab({ onClick }) {
   );
 }
 
-function EnvImpactReportModal({ watercourse: w, occurrences, dischargeData, iotSensors, onClose }) {
+function EnvImpactReportModal({ watercourse: w, occurrences, dischargeData, iotSensors, selectedCountry = 'UY', onClose }) {
   const today = new Date();
   const dateStr = today.toLocaleDateString('pt-BR');
 
@@ -3835,7 +3858,7 @@ function EnvImpactReportModal({ watercourse: w, occurrences, dischargeData, iotS
   const topSpecies = Object.entries(spCounts).sort((a, b) => b[1] - a[1]).slice(0, 5);
 
   // Vedas ativas neste curso
-  const vedas = getVedasAtivas(today);
+  const vedas = getVedasAtivas(today, selectedCountry);
 
   // Estoque DINARA — espécies relevantes encontradas neste curso
   const stockEntries = topSpecies
@@ -6651,7 +6674,7 @@ function App() {
         <div className={`profile-card${collapsedCards['species'] ? ' collapsed' : ''}`}>
           <div className="section-title"><Activity size={18} /> Perfil da{selectedSpeciesList.length > 1 ? 's' : ''} espécie{selectedSpeciesList.length > 1 ? 's' : ''} <button className="collapse-btn" onClick={() => toggleCardCollapse('species')} type="button">{collapsedCards['species'] ? <ChevronDown size={14} /> : <ChevronUp size={14} />}</button></div>
           {!collapsedCards['species'] && selectedSpeciesList.map((sp) => {
-            const vedaInfo = getVedaStatus(sp.id);
+            const vedaInfo = getVedaStatus(sp.id, undefined, selectedCountry);
             return (
             <div key={sp.id} style={{ marginBottom: selectedSpeciesList.length > 1 ? 10 : 0 }}>
               {vedaInfo && vedaInfo.active && (
@@ -6736,12 +6759,17 @@ function App() {
           {!collapsedCards['vedas'] && (() => {
             const hoje = new Date();
             const meses = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
-            const itens = getVedasAtivas(hoje);
+            const itens = getVedasAtivas(hoje, selectedCountry);
             return (
               <div>
                 <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: 10 }}>
-                  Baseado em CARU Res. 59/12 e DINARA Dec. 149/997. Verifique sempre a legislação vigente.
+                  {FISHING_LAW_NOTE[selectedCountry] || FISHING_LAW_NOTE['UY']}
                 </p>
+                {itens.length === 0 && (
+                  <p style={{ fontSize: '0.74rem', color: 'var(--text-dim)', marginBottom: 8 }}>
+                    Sem vedas por espécie cadastradas para esta região no momento — siga a nota de defeso acima.
+                  </p>
+                )}
                 {itens.map(({ veda, sp, status }) => {
                   const isActive = status?.active;
                   const isAbsoluta = veda.type === 'absoluta';
@@ -7286,6 +7314,7 @@ function App() {
           occurrences={occurrences}
           dischargeData={dischargeData}
           iotSensors={iotSensors}
+          selectedCountry={selectedCountry}
           onClose={() => setEnvReportTarget(null)}
         />
       )}
