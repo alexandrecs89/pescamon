@@ -23,7 +23,19 @@ import { dirname, join } from 'node:path';
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const SHP = join(ROOT, '.uc_tmp', 'cnuc', 'cnuc_2025_08.shp');
 const DBF = join(ROOT, '.uc_tmp', 'cnuc', 'cnuc_2025_08.dbf');
-const UF_ALVO = 'RIO GRANDE DO SUL';
+
+// UF alvo via argumento: `node build_protected_areas.mjs SC` (default RS).
+// O filtro casa o nome da UF como aparece no campo `uf` do CNUC.
+const UF_MAP = {
+  RS: { nome: 'RIO GRANDE DO SUL', out: 'protected_areas_rs.json' },
+  SC: { nome: 'SANTA CATARINA',    out: 'protected_areas_sc.json' },
+  PR: { nome: 'PARANÁ',            out: 'protected_areas_pr.json' },
+};
+const UF_ARG = (process.argv[2] || 'RS').toUpperCase();
+const UF_CFG = UF_MAP[UF_ARG];
+if (!UF_CFG) { console.error(`UF desconhecida: ${UF_ARG}. Use uma de: ${Object.keys(UF_MAP).join(', ')}`); process.exit(1); }
+const UF_ALVO = UF_CFG.nome;
+const OUT_FILE = UF_CFG.out;
 
 // categoria (texto CNUC) → código normalizado do app
 function categoryCode(categoria) {
@@ -97,13 +109,13 @@ async function build() {
   out.sort((a, b) => (ordEsf[a.esfera] - ordEsf[b.esfera]) || a.name.localeCompare(b.name));
 
   const vert = out.reduce((s, a) => s + a.rings.reduce((t, r) => t + r.length, 0), 0);
-  writeFileSync(join(ROOT, 'public', 'protected_areas_rs.json'), JSON.stringify(out));
+  writeFileSync(join(ROOT, 'public', OUT_FILE), JSON.stringify(out));
   const byEsf = out.reduce((a, x) => ((a[x.esfera] = (a[x.esfera] || 0) + 1), a), {});
   const byCat = out.reduce((a, x) => ((a[x.category] = (a[x.category] || 0) + 1), a), {});
-  console.log(`CNUC: ${total} UCs no país | RS ativas: ${rs} → ${out.length} áreas, ${vert} vértices`);
+  console.log(`CNUC: ${total} UCs no país | ${UF_ARG} ativas: ${rs} → ${out.length} áreas, ${vert} vértices`);
   console.log('  por esfera:', JSON.stringify(byEsf));
   console.log('  por categoria:', JSON.stringify(byCat));
-  console.log('OK -> public/protected_areas_rs.json');
+  console.log(`OK -> public/${OUT_FILE}`);
 }
 
 build().catch(e => { console.error('ERRO', e.message); process.exit(1); });

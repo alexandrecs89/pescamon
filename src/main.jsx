@@ -166,9 +166,9 @@ const COUNTRIES = [
     name: 'Brasil — Santa Catarina',
     shortName: 'Brasil (SC)',
     flagUrl: 'https://flagcdn.com/br.svg',
-    available: false,
-    bbox: { minLat: -29.3, maxLat: -26.2, minLon: -53.8, maxLon: -48.5 },
-    center: { latitude: -27.5, longitude: -51.0 },
+    available: true,
+    bbox: { minLat: -29.5, maxLat: -25.9, minLon: -53.9, maxLon: -48.3 },
+    center: { latitude: -27.3, longitude: -50.5 },
     defaultZoom: 7,
   },
   {
@@ -206,6 +206,10 @@ const BASINS_BY_COUNTRY = {
     { id: 'bacia_uruguai',      name: 'Bacia do Rio Uruguai',     emoji: '🏞️', color: '#f97316' },
     { id: 'bacia_jacui',        name: 'Bacia do Jacuí / Ibicuí',  emoji: '💧', color: '#22d3ee' },
     { id: 'bacia_merin',        name: 'Bacia da Lagoa Mirim',     emoji: '🌿', color: '#ef4444' },
+    { id: 'vertente_atlantica', name: 'Vertente Atlântica',       emoji: '🏖️', color: '#a855f7' },
+  ],
+  'BR-SC': [
+    { id: 'bacia_uruguai',      name: 'Bacia do Rio Uruguai',     emoji: '🏞️', color: '#f97316' },
     { id: 'vertente_atlantica', name: 'Vertente Atlântica',       emoji: '🏖️', color: '#a855f7' },
   ],
 };
@@ -272,7 +276,7 @@ const RS_POLYGON = [
 // aqui servem para o CONTORNO no mapa e, no caso do RS, para o isPointInRS).
 // rs_boundary.json (IBGE, codarea=43) · uy_boundary.json (união das cuencas DINAGUA).
 // Para adicionar uma região nova: gerar o arquivo + acrescentar a entrada aqui.
-const _BOUNDARY_FILES = { 'BR-RS': 'rs_boundary.json', 'UY': 'uy_boundary.json' };
+const _BOUNDARY_FILES = { 'BR-RS': 'rs_boundary.json', 'BR-SC': 'sc_boundary.json', 'UY': 'uy_boundary.json' };
 const _boundaryRings = {};        // countryId -> [ [ [lat,lon], ... ], ... ]
 const _boundarySubs = new Set();
 function getBoundaryRings(countryId) { return _boundaryRings[countryId] || null; }
@@ -1514,7 +1518,7 @@ const extraRiversCache = {}; // Resetado para v5-state-filtered
 // — sobrevive ao HMR do Vite (que reexecuta o módulo)
 // — o bloco de carregamento só roda se tilesLoaded === false
 // ============================================================
-const _TRIB_VERSION = 'v48-uy-dinagua'; // Hidrografia oficial BHO 2017 (ANA), recortada à fronteira IBGE; Uruguai Strahler>=3, demais bacias >=1
+const _TRIB_VERSION = 'v49-br-sc'; // + Santa Catarina (BHO 2017, 2 bacias: Uruguai + Vertente Atlântica, DP simplificado)
 if (!globalThis.__pescamon_trib__ || globalThis.__pescamon_trib__._version !== _TRIB_VERSION) {
   console.log('[TRIB] Resetando singleton para versão', _TRIB_VERSION);
   globalThis.__pescamon_trib__ = {
@@ -1633,7 +1637,7 @@ async function loadTribsForCountry(countryId) {
       
       const ratio = total === 0 ? 0 : (inside / total);
       // Para Brasil, exigir 100% dos pontos dentro do bbox para evitar contaminação de estados vizinhos
-      const requiredRatio = countryId === 'BR-RS' ? 1.0 : 0.90;
+      const requiredRatio = /^BR-/.test(countryId) ? 1.0 : 0.90;
       const passes = total === 0 || ratio >= requiredRatio;
       console.log('[DEBUG] isInCountry:', total, 'pontos,', inside, 'dentros, ratio:', (ratio*100).toFixed(1) + '%', '→', passes ? 'PASSOU' : 'REJEITADO');
       console.log('[DEBUG] País:', countryId, '- Ratio exigido:', (requiredRatio*100) + '%');
@@ -1695,8 +1699,8 @@ async function loadTribsForCountry(countryId) {
             let paths = trib.paths || [];
             if (paths.length === 0) continue;
             
-            // Para BR-RS: dados já processados para o RS, não filtrar ponto a ponto
-            if (countryId === 'BR-RS') {
+            // Estados BR (BR-RS, BR-SC, …): dados BHO já recortados à fronteira, não filtrar ponto a ponto
+            if (/^BR-/.test(countryId)) {
               paths = paths.filter(seg => seg.length >= 2);
             } else if (countryBbox) {
               const { minLat, maxLat, minLon, maxLon } = countryBbox;
@@ -1711,8 +1715,8 @@ async function loadTribsForCountry(countryId) {
               name: trib.name || id,
               type: trib.type || 'rio',
               paths,
-              // Para BR-RS: usar regionId do objeto (classificado por bacia) em vez do manifest
-              regionId: (countryId === 'BR-RS' && trib.regionId) ? trib.regionId : (regionId || baseRegionId || trib.regionId || 'bacia_desconhecida'),
+              // Estados BR: usar o regionId do objeto (já classificado por bacia) em vez do manifest
+              regionId: (/^BR-/.test(countryId) && trib.regionId) ? trib.regionId : (regionId || baseRegionId || trib.regionId || 'bacia_desconhecida'),
               center: getCenter(paths)
             });
           }
@@ -2323,9 +2327,9 @@ const species = [
   { id: 'leporino', name: 'Trompa roja', namePt: 'Piau', nameEs: 'Leporino / Trompa roja', nameEn: 'Banded leporinus', scientificName: 'Leporinus lacustris', conservation: { status: 'regulated', minSize: 28, note: 'Tamanho mínimo recomendado: 28 cm. Espécie nativa dos grandes rios do Uruguai; não confundir com a boga (Megaleporinus obtusidens).' }, color: '#f59e0b', size: '18-35 cm', diet: 'frutos, sementes, algas, invertebrados e material vegetal', activity: 'diurna', habits: 'herbívoro-onívoro de rios de médio a grande porte; ocorre no Río Uruguay e afluentes maiores (Queguay, Daymán, Arapey); nada em cardumes perto de margens vegetadas e em corredeiras; identificado pelas faixas escuras transversais no corpo', preferences: { depth: 2.8, flow: 0.58, vegetation: 0.65, shade: 0.32, turbidity: 0.40, oxygen: 0.72, structure: 0.48, temperature: 21, solar: 50 } },
   { id: 'pachyurus', name: 'Corvina de río', namePt: 'Corvina-do-rio', nameEs: 'Corvina de río', nameEn: 'South American river croaker', scientificName: 'Pachyurus bonariensis', conservation: { status: 'regulated', minSize: 28, note: 'Tamanho mínimo recomendado: 28 cm. Espécie de água doce do Río de la Plata e Río Uruguay; diferente da corvina de rio (Plagioscion) e das corvinas costeiras.' }, color: '#818cf8', size: '20-45 cm', diet: 'peixes pequenos, crustáceos e insetos aquáticos', activity: 'noturna-crepuscular', habits: 'corvina exclusivamente de água doce; ocupa canais profundos do baixo Río Uruguay, Río de la Plata e o embalse do Río Negro; muito confundida com a corvina-de-rio (Plagioscion ternetzi) e com corvinas costeiras', preferences: { depth: 4.5, flow: 0.38, vegetation: 0.25, shade: 0.50, turbidity: 0.68, oxygen: 0.58, structure: 0.55, temperature: 18, solar: 10 } },
   // ── Espécies do RS — estuarina regulada + esportivos introduzidos ───────────
-  { id: 'bagre_marinho', name: 'Bagre de mar', namePt: 'Bagre-marinho', nameEs: 'Bagre de mar', nameEn: 'White sea catfish', scientificName: 'Genidens barbus', regions: ['UY', 'BR-RS'], conservation: { status: 'regulated', minSize: 35, note: 'Espécie estuarina sobre-explotada. Pesca regulada pela Resolução SEMA-RS 001/2018 (Lagoa dos Patos, Lago Guaíba e Bacia do Rio Tramandaí). Respeite tamanhos e períodos definidos para o estoque.' }, color: '#9ca3af', size: '30-90 cm', diet: 'crustáceos, moluscos e peixes de fundo estuarino', activity: 'noturna', habits: 'bagre estuarino-marinho que sobe à Lagoa dos Patos e ao Guaíba para reprodução; fundos lamosos de estuário e baixos rios; estoque sensível à sobrepesca', preferences: { depth: 4.0, flow: 0.30, vegetation: 0.18, shade: 0.45, turbidity: 0.72, oxygen: 0.55, structure: 0.50, temperature: 19, solar: 8 } },
-  { id: 'tilapia', name: 'Tilapia', namePt: 'Tilápia-do-nilo', nameEs: 'Tilapia', nameEn: 'Nile tilapia', scientificName: 'Oreochromis niloticus', regions: ['BR-RS'], conservation: { status: 'invasive', note: 'Espécie exótica invasora, muito comum em açudes, lagoas e reservatórios do RS. A soltura em novos ambientes é proibida e prejudica a fauna nativa.' }, color: '#65a30d', size: '20-45 cm', diet: 'onívora — algas, detritos, plâncton e invertebrados', activity: 'diurna', habits: 'exótica tolerante a águas paradas, quentes e de baixo oxigênio; abundante em açudes e reservatórios; reproduz-se intensamente', preferences: { depth: 1.8, flow: 0.20, vegetation: 0.70, shade: 0.45, turbidity: 0.58, oxygen: 0.40, structure: 0.55, temperature: 25, solar: 40 } },
-  { id: 'black_bass', name: 'Black bass', namePt: 'Black bass', nameEs: 'Perca americana', nameEn: 'Largemouth bass', scientificName: 'Micropterus salmoides', regions: ['BR-RS'], conservation: { status: 'invasive', note: 'Peixe esportivo exótico (introduzido), em reservatórios e açudes de água mais fria e limpa do RS. Não solte em novos ambientes aquáticos.' }, color: '#16a34a', size: '30-60 cm', diet: 'predador — peixes, anfíbios e crustáceos', activity: 'diurna-crepuscular', habits: 'exótico de emboscada associado a estruturas submersas e vegetação; prefere água limpa, mais fria e parada de açudes e represas', preferences: { depth: 3.0, flow: 0.18, vegetation: 0.72, shade: 0.62, turbidity: 0.30, oxygen: 0.70, structure: 0.85, temperature: 20, solar: 30 } },
+  { id: 'bagre_marinho', name: 'Bagre de mar', namePt: 'Bagre-marinho', nameEs: 'Bagre de mar', nameEn: 'White sea catfish', scientificName: 'Genidens barbus', regions: ['UY', 'BR-RS', 'BR-SC'], conservation: { status: 'regulated', minSize: 35, note: 'Espécie estuarina sobre-explotada. Pesca regulada pela Resolução SEMA-RS 001/2018 (Lagoa dos Patos, Lago Guaíba e Bacia do Rio Tramandaí). Respeite tamanhos e períodos definidos para o estoque.' }, color: '#9ca3af', size: '30-90 cm', diet: 'crustáceos, moluscos e peixes de fundo estuarino', activity: 'noturna', habits: 'bagre estuarino-marinho que sobe à Lagoa dos Patos e ao Guaíba para reprodução; fundos lamosos de estuário e baixos rios; estoque sensível à sobrepesca', preferences: { depth: 4.0, flow: 0.30, vegetation: 0.18, shade: 0.45, turbidity: 0.72, oxygen: 0.55, structure: 0.50, temperature: 19, solar: 8 } },
+  { id: 'tilapia', name: 'Tilapia', namePt: 'Tilápia-do-nilo', nameEs: 'Tilapia', nameEn: 'Nile tilapia', scientificName: 'Oreochromis niloticus', regions: ['BR-RS', 'BR-SC'], conservation: { status: 'invasive', note: 'Espécie exótica invasora, muito comum em açudes, lagoas e reservatórios do RS. A soltura em novos ambientes é proibida e prejudica a fauna nativa.' }, color: '#65a30d', size: '20-45 cm', diet: 'onívora — algas, detritos, plâncton e invertebrados', activity: 'diurna', habits: 'exótica tolerante a águas paradas, quentes e de baixo oxigênio; abundante em açudes e reservatórios; reproduz-se intensamente', preferences: { depth: 1.8, flow: 0.20, vegetation: 0.70, shade: 0.45, turbidity: 0.58, oxygen: 0.40, structure: 0.55, temperature: 25, solar: 40 } },
+  { id: 'black_bass', name: 'Black bass', namePt: 'Black bass', nameEs: 'Perca americana', nameEn: 'Largemouth bass', scientificName: 'Micropterus salmoides', regions: ['BR-RS', 'BR-SC'], conservation: { status: 'invasive', note: 'Peixe esportivo exótico (introduzido), em reservatórios e açudes de água mais fria e limpa do RS. Não solte em novos ambientes aquáticos.' }, color: '#16a34a', size: '30-60 cm', diet: 'predador — peixes, anfíbios e crustáceos', activity: 'diurna-crepuscular', habits: 'exótico de emboscada associado a estruturas submersas e vegetação; prefere água limpa, mais fria e parada de açudes e represas', preferences: { depth: 3.0, flow: 0.18, vegetation: 0.72, shade: 0.62, turbidity: 0.30, oxygen: 0.70, structure: 0.85, temperature: 20, solar: 30 } },
   { id: 'tucunare', name: 'Tucunaré', namePt: 'Tucunaré', nameEs: 'Tucunaré', nameEn: 'Peacock bass', scientificName: 'Cichla kelberi', regions: ['BR-RS'], conservation: { status: 'invasive', note: 'Ciclídeo predador exótico, introduzido em reservatórios mais quentes do RS. Não solte em novos ambientes — predador agressivo da fauna nativa.' }, color: '#f59e0b', size: '30-60 cm', diet: 'predador visual — peixes', activity: 'diurna', habits: 'exótico de emboscada perto de estruturas e margens; prefere água quente, parada e limpa de reservatórios; muito visual e territorial', preferences: { depth: 2.6, flow: 0.22, vegetation: 0.55, shade: 0.55, turbidity: 0.28, oxygen: 0.66, structure: 0.82, temperature: 26, solar: 38 } },
 ].sort((a, b) => a.name.localeCompare(b.name, 'pt'));
 
@@ -2857,42 +2861,51 @@ const VEDAS = [
     note: 'Veda absoluta permanente para todas as espécies de armado no Río Uruguay: Pterodoras granulosus, Oxydoras kneri, Rhinodoras dorbignyi e Megalodoras laevigatulus. Devolver imediatamente ao rio.',
   },
 
-  // ── RS (BR-RS) — Piracema/defeso. Datas exatas são fixadas por portaria ANUAL;
-  // confirme a portaria vigente da temporada. (region: 'BR-RS') ───────────────
+  // ── RS/SC — Piracema da Bacia do Rio Uruguai (abrange BR-RS e BR-SC) + defeso.
+  // Datas exatas são fixadas por portaria ANUAL; confirme a vigente da temporada. ──
   {
-    speciesId: 'dourado', region: 'BR-RS',
+    speciesId: 'dourado', region: ['BR-RS', 'BR-SC'],
     type: 'piracema',
     period: { start: [10, 1], end: [1, 31] },
     authority: 'IBAMA IN 193/2008 (Bacia do Rio Uruguai)',
     note: 'Piracema na Bacia do Rio Uruguai: defeso de ~1°/out a 31/jan (confirme a portaria da temporada). Dourado proibido no período. Permitido apenas linha de mão ou vara/caniço com linha e anzol — 1 petrecho por pescador, embarcação não motorizada. Recomenda-se pesque-e-solte o ano todo.',
   },
   {
-    speciesId: 'surubí', region: 'BR-RS',
+    speciesId: 'surubí', region: ['BR-RS', 'BR-SC'],
     type: 'piracema',
     period: { start: [10, 1], end: [1, 31] },
     authority: 'IBAMA IN 193/2008 (Bacia do Rio Uruguai)',
     note: 'Piracema na Bacia do Rio Uruguai: defeso de ~1°/out a 31/jan (confirme a portaria da temporada). Surubim/pintado proibido no período. Só linha de mão ou vara/anzol, 1 petrecho, barco não motorizado.',
   },
-  // Demais migratórias da Bacia do Rio Uruguai sob a mesma piracema (IBAMA IN 193/2008).
-  { speciesId: 'pacu', region: 'BR-RS', type: 'piracema', period: { start: [10, 1], end: [1, 31] }, authority: 'IBAMA IN 193/2008 (Bacia do Rio Uruguai)', note: 'Piracema (~1°/out a 31/jan, confirme a portaria): pacu é migratória e fica proibida no defeso. Só linha/vara, 1 petrecho, barco não motorizado.' },
-  { speciesId: 'pira_pita', region: 'BR-RS', type: 'piracema', period: { start: [10, 1], end: [1, 31] }, authority: 'IBAMA IN 193/2008 (Bacia do Rio Uruguai)', note: 'Piracema (~1°/out a 31/jan, confirme a portaria): piracanjuba (pira-pitã) é migratória e fica proibida no defeso.' },
-  { speciesId: 'manguruyu', region: 'BR-RS', type: 'piracema', period: { start: [10, 1], end: [1, 31] }, authority: 'IBAMA IN 193/2008 (Bacia do Rio Uruguai)', note: 'Piracema (~1°/out a 31/jan, confirme a portaria): jaú é migratória e fica proibido no defeso.' },
-  { speciesId: 'sabalito', region: 'BR-RS', type: 'piracema', period: { start: [10, 1], end: [1, 31] }, authority: 'IBAMA IN 193/2008 (Bacia do Rio Uruguai)', note: 'Piracema (~1°/out a 31/jan, confirme a portaria): grumatã/curimbatá é migratória e fica proibida no defeso.' },
-  { speciesId: 'boga', region: 'BR-RS', type: 'piracema', period: { start: [10, 1], end: [1, 31] }, authority: 'IBAMA IN 193/2008 (Bacia do Rio Uruguai)', note: 'Piracema (~1°/out a 31/jan, confirme a portaria): piapara/boga é migratória e fica proibida no defeso.' },
+  // Demais migratórias da Bacia do Rio Uruguai sob a mesma piracema (IBAMA IN 193/2008) — RS e SC.
+  { speciesId: 'pacu', region: ['BR-RS', 'BR-SC'], type: 'piracema', period: { start: [10, 1], end: [1, 31] }, authority: 'IBAMA IN 193/2008 (Bacia do Rio Uruguai)', note: 'Piracema (~1°/out a 31/jan, confirme a portaria): pacu é migratória e fica proibida no defeso. Só linha/vara, 1 petrecho, barco não motorizado.' },
+  { speciesId: 'pira_pita', region: ['BR-RS', 'BR-SC'], type: 'piracema', period: { start: [10, 1], end: [1, 31] }, authority: 'IBAMA IN 193/2008 (Bacia do Rio Uruguai)', note: 'Piracema (~1°/out a 31/jan, confirme a portaria): piracanjuba (pira-pitã) é migratória e fica proibida no defeso.' },
+  { speciesId: 'manguruyu', region: ['BR-RS', 'BR-SC'], type: 'piracema', period: { start: [10, 1], end: [1, 31] }, authority: 'IBAMA IN 193/2008 (Bacia do Rio Uruguai)', note: 'Piracema (~1°/out a 31/jan, confirme a portaria): jaú é migratória e fica proibido no defeso.' },
+  { speciesId: 'sabalito', region: ['BR-RS', 'BR-SC'], type: 'piracema', period: { start: [10, 1], end: [1, 31] }, authority: 'IBAMA IN 193/2008 (Bacia do Rio Uruguai)', note: 'Piracema (~1°/out a 31/jan, confirme a portaria): grumatã/curimbatá é migratória e fica proibida no defeso.' },
+  { speciesId: 'boga', region: ['BR-RS', 'BR-SC'], type: 'piracema', period: { start: [10, 1], end: [1, 31] }, authority: 'IBAMA IN 193/2008 (Bacia do Rio Uruguai)', note: 'Piracema (~1°/out a 31/jan, confirme a portaria): piapara/boga é migratória e fica proibida no defeso.' },
   // Estuário (Lagoa dos Patos) — espécies reguladas (sem período fixo simples; ver portaria).
   { speciesId: 'lisa', region: 'BR-RS', type: 'regulada', authority: 'MMA IN 5/2004 · regras da safra (Lagoa dos Patos)', note: 'Tainha é espécie sobre-explotada (Anexo II, MMA IN 5/2004). A safra na Lagoa dos Patos é regulada por período e tamanho — confirme a portaria/safra vigente antes de pescar.' },
   { speciesId: 'bagre_marinho', region: 'BR-RS', type: 'regulada', authority: 'SEMA-RS Resolução 001/2018', note: 'Bagre-marinho (estuarino) com pesca regulada na Lagoa dos Patos, Lago Guaíba e Bacia do Rio Tramandaí (SEMA-RS Res. 001/2018): respeite tamanhos e períodos definidos para o estoque.' },
+  // ── SC — litoral: a safra da tainha é regulada por portaria federal anual (Sul/Sudeste).
+  { speciesId: 'lisa', region: 'BR-SC', type: 'regulada', authority: 'Defeso/safra da tainha — portaria federal (Sul/Sudeste)', note: 'A safra da tainha no litoral de SC é regulada por período, petrechos e cotas definidos em portaria federal anual. Tainha é estoque sobre-explotado — confirme sempre a portaria/safra vigente antes de pescar.' },
 ];
 
 // Nota geral de legislação por região (regimes que não cabem em veda por espécie).
 const FISHING_LAW_NOTE = {
   'BR-RS': 'No RS há regimes distintos por bacia: Piracema na Bacia do Rio Uruguai (~out–jan, IBAMA IN 193/2008) e defeso na Lagoa dos Patos/Guaíba acima de Arambaré (~nov–jan, IBAMA IN 197/2008). Tainha é sobre-explotada (MMA IN 5/2004) e o bagre tem regramento próprio (SEMA-RS Resolução 001/2018). Datas exatas mudam por portaria anual — confirme sempre a vigente antes de pescar.',
+  'BR-SC': 'Em SC há dois regimes: no interior, Piracema na Bacia do Rio Uruguai (~out–jan, IBAMA IN 193/2008) protege as migratórias (dourado, surubim, pacu, jaú, grumatã); no litoral, a safra da tainha é regulada por portaria federal anual (Sul/Sudeste). Datas exatas mudam por portaria anual — confirme sempre a vigente antes de pescar.',
   'UY': 'Calendário baseado em CARU Res. 59/12 e DINARA Decreto 149/997. Verifique sempre a legislação vigente.',
 };
 
+// Uma veda pode valer para uma região (string) ou várias (array). Sem campo => 'UY'.
+function vedaInRegion(v, region) {
+  const r = v.region || 'UY';
+  return Array.isArray(r) ? r.includes(region) : r === region;
+}
+
 // Retorna o status de veda de uma espécie para uma data (na jurisdição da região)
 function getVedaStatus(speciesId, date = new Date(), region = 'UY') {
-  const vedas = VEDAS.filter(v => v.speciesId === speciesId && (v.region || 'UY') === region);
+  const vedas = VEDAS.filter(v => v.speciesId === speciesId && vedaInRegion(v, region));
   if (!vedas.length) return null;
 
   const absVeda = vedas.find(v => v.type === 'absoluta');
@@ -2937,7 +2950,7 @@ function getVedaStatus(speciesId, date = new Date(), region = 'UY') {
 
 // Retorna todas as vedas com status atual, para o card calendário
 function getVedasAtivas(date = new Date(), region = 'UY') {
-  return VEDAS.filter(v => (v.region || 'UY') === region).map(veda => {
+  return VEDAS.filter(v => vedaInRegion(v, region)).map(veda => {
     const sp = species.find(s => s.id === veda.speciesId);
     const status = getVedaStatus(veda.speciesId, date, region);
     return { veda, sp, status };
@@ -4496,7 +4509,7 @@ function App() {
   // Áreas de preservação carregadas por país (RS = UCs oficiais ICMBio; UY usa SNAP_AREAS
   // inline). Para uma região nova, basta gerar public/protected_areas_<uf>.json + a entrada aqui.
   useEffect(() => {
-    const files = { 'BR-RS': 'protected_areas_rs.json' };
+    const files = { 'BR-RS': 'protected_areas_rs.json', 'BR-SC': 'protected_areas_sc.json' };
     const file = files[selectedCountry];
     if (!file) { setProtectedAreas([]); return; }
     let cancelled = false;
@@ -5218,8 +5231,9 @@ function App() {
 
   // União dos tipos de curso selecionados para filtrar espécies disponíveis
   const availableSpecies = useMemo(() => {
-    // Filtra por país: espécie sem `regions` = compartilhada (UY+BR-RS); exóticos do RS têm regions próprias.
-    const inCountry = (s) => (s.regions || ['UY', 'BR-RS']).includes(selectedCountry);
+    // Filtra por país: espécie sem `regions` = compartilhada (UY + estados do Cone Sul);
+    // exóticos/regionais declaram `regions` próprias.
+    const inCountry = (s) => (s.regions || ['UY', 'BR-RS', 'BR-SC']).includes(selectedCountry);
     const base = species.filter(inCountry);
     if (selectedWatercourses.length === 0) return base;
     const allowed = new Set(selectedWatercourses.flatMap((w) => SPECIES_BY_WATERCOURSE[w.type] || []));
@@ -7904,8 +7918,8 @@ function AllWatercourses({ tributaryLines, waterQualityData, species, occurrence
   // Mostrar todos os cursos quando nenhuma bacia está selecionada ou quando showWatercourses está ativo
   const shouldShowAll = activeBasins.size === 0 || activeBasins.size > 0;
 
-  // Simplificação adaptativa — BR-RS usa menos simplificação para preservar forma dos rios
-  const simplifyStep = selectedCountry === 'BR-RS'
+  // Simplificação adaptativa — estados BR usam menos simplificação para preservar a forma dos rios
+  const simplifyStep = /^BR-/.test(selectedCountry)
     ? (zoom >= 14 ? 1 : zoom >= 12 ? 1 : zoom >= 10 ? 2 : 3)
     : (zoom >= 14 ? 1 : zoom >= 12 ? 2 : zoom >= 10 ? 3 : 5);
 
@@ -7927,8 +7941,8 @@ function AllWatercourses({ tributaryLines, waterQualityData, species, occurrence
     // bbox do país selecionado para filtrar tributários fora dos limites
     const countryBbox = COUNTRIES.find(c => c.id === selectedCountry)?.bbox || null;
     const inCountryBbox = (paths) => {
-      // BR-RS: dados já curados para o estado, sem filtro bbox no render
-      if (selectedCountry === 'BR-RS') return true;
+      // Estados BR: dados já recortados à fronteira, sem filtro bbox no render
+      if (/^BR-/.test(selectedCountry)) return true;
       if (!countryBbox) return true;
       const { minLat, maxLat, minLon, maxLon } = countryBbox;
       // Filtragem RIGOROSA: excluir se QUALQUER ponto estiver fora do bbox (evita SC/PR)
@@ -7963,36 +7977,9 @@ function AllWatercourses({ tributaryLines, waterQualityData, species, occurrence
       }
     });
     
-    // Log específico: cursos com pontos acima de -27.08 (possível SC/PR)
-    const scCourses = filtered.filter(t => {
-      if (!t.paths) return false;
-      for (const seg of t.paths) {
-        for (const pt of seg) {
-          if (pt[0] > -27.08) return true; // Latitude maior que -27.08 = SC/PR
-        }
-      }
-      return false;
-    });
-    if (scCourses.length > 0) {
-      console.log(`[DEBUG] ⚠️ ENCONTRADOS ${scCourses.length} CURSOS COM PONTOS ACIMA DE -27.08 (SC/PR):`);
-      scCourses.forEach(t => console.log(`  - ${t.name} (${t.regionId})`));
-    } else {
-      console.log('[DEBUG] ✅ Nenhum curso com pontos acima de -27.08 (SC/PR)');
-    }
-    
-    // Log específico para cursos com "Ibicuí" ou "Lajeado" no nome
-    const debugNames = ['ibicu', 'lajeado'];
-    const debugCourses = filtered.filter(t => debugNames.some(n => t.name && t.name.toLowerCase().includes(n)));
-    if (debugCourses.length > 0) {
-      console.log(`[DEBUG] 🔍 CURSOS COM 'IBICUÍ' OU 'LAJEADO' RENDERIZADOS (${debugCourses.length}):`);
-      debugCourses.forEach(t => {
-        const firstPt = t.paths?.[0]?.[0];
-        const lastPt = t.paths?.[0]?.[t.paths[0].length - 1];
-        console.log(`  - ${t.name} (${t.regionId})`);
-        console.log(`    Primeiro: [${firstPt?.[0]}, ${firstPt?.[1]}] Último: [${lastPt?.[0]}, ${lastPt?.[1]}]`);
-      });
-    }
-    
+    // (Removido o diagnóstico legado do RS que iterava todos os trechos acima de
+    //  -27.08 — em SC quase toda a malha está nessa faixa e o log travava a aba.)
+
     return filtered.map(t => ({ ...t, paths: t.paths.map(p => _simplifyBasinPath(p, simplifyStep)) }));
   }, [tributaryLines, activeBasins, simplifyStep, selectedCountry]);
 
@@ -8015,8 +8002,8 @@ function AllWatercourses({ tributaryLines, waterQualityData, species, occurrence
   const santaLuciaScore = santaLuciaQuality?.quality_score || estimateWaterQualityHeuristic('Rio Santa Lucia', 'rio', 0, 0);
   const santaLuciaSpecies = species.filter(s => BIG_FISH_SPECIES.has(s.id)).slice(0, 5);
   
-  // Peso base — para BR-RS usar linhas mais grossas em zoom baixo
-  const lineWeight = selectedCountry === 'BR-RS'
+  // Peso base — estados BR usam linhas mais grossas em zoom baixo
+  const lineWeight = /^BR-/.test(selectedCountry)
     ? (zoom >= 14 ? 4 : zoom >= 12 ? 3 : zoom >= 10 ? 2.5 : 2)
     : (zoom >= 14 ? 4 : zoom >= 12 ? 2.5 : 1.8);
   const hitWeight = Math.max(44 - zoom * 2.5, 12);
@@ -8027,6 +8014,7 @@ function AllWatercourses({ tributaryLines, waterQualityData, species, occurrence
     bacia_uruguai_AR:        '#f97316',
     bacia_uruguai_BR:        '#f97316',
     'bacia_uruguai_BR-RS':   '#f97316',
+    'bacia_uruguai_BR-SC':   '#f97316',
     bacia_rio_negro:         '#eab308',
     bacia_rio_negro_UY:      '#eab308',
     bacia_rio_negro_AR:      '#eab308',
@@ -8044,6 +8032,7 @@ function AllWatercourses({ tributaryLines, waterQualityData, species, occurrence
     vertente_atlantica_UY:   '#a855f7',
     vertente_atlantica_BR:   '#a855f7',
     'vertente_atlantica_BR-RS': '#a855f7',
+    'vertente_atlantica_BR-SC': '#a855f7',
     bacia_santa_lucia:       '#22c55e',
     bacia_santa_lucia_UY:    '#22c55e',
     bacia_jacui:             '#22d3ee',

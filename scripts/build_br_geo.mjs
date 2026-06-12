@@ -34,7 +34,7 @@ const UF = {
   '50': ['MS', 'Mato Grosso do Sul'], '51': ['MT', 'Mato Grosso'],
   '52': ['GO', 'Goiás'], '53': ['DF', 'Distrito Federal'],
 };
-const AVAILABLE = { '43': 'BR-RS' }; // codarea → regionId navegável
+const AVAILABLE = { '43': 'BR-RS', '42': 'BR-SC' }; // codarea → regionId navegável
 
 async function getGeo(url) {
   const res = await fetch(url, { headers: { 'Accept': 'application/json' } });

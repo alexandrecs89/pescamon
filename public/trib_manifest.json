@@ -96,5 +96,17 @@
       "regionId": "bacia_santa_lucia_UY",
       "baseRegionId": "bacia_santa_lucia"
     }
+  ],
+  "BR-SC": [
+    {
+      "file": "trib_sc_uruguai.json",
+      "regionId": "bacia_uruguai_BR-SC",
+      "baseRegionId": "bacia_uruguai"
+    },
+    {
+      "file": "trib_sc_vertente_atlantica.json",
+      "regionId": "vertente_atlantica_BR-SC",
+      "baseRegionId": "vertente_atlantica"
+    }
   ]
 }
