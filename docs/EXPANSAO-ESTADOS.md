@@ -173,40 +173,47 @@ distribuição sem gerar geometria — **use sempre antes do build completo**).
 
 ## 6. Limites de RENDERIZAÇÃO do app (o gargalo que mais travou)
 
-O `AllWatercourses`/`BasinLayer` renderiza **um componente React `<Polyline>` por
-trecho**. Isso não escala de graça. Lições já aplicadas em `main.jsx` (mantenha-as):
+> **Atualização (jun/2026):** a arquitetura de render mudou. Antes era **um
+> `<Polyline>` React por trecho** — o que travava a reconciliação acima de ~50k
+> elementos e limitava a densidade. Agora cada bacia é **UMA única multi-polyline**
+> e o clique é resolvido no nível do mapa. Isto destrava redes muito densas
+> (testado com ~168k trechos em SC). Mantenha este desenho:
 
-1. **Um único canvas compartilhado satura ~40k linhas e não pinta NADA** (tela
-   branca, não só lento). → Cada bacia usa seu **próprio canvas renderer**, via o
-   pool `getBasinRenderer(regionId)`. Distribui a carga; nenhum canvas isolado
-   passa do limite. **Ao adicionar um estado, cada bacia nova já ganha seu canvas
-   automaticamente** (a chave é o `regionId`).
+1. **Uma multi-polyline por bacia** (`BasinLayer`): `<Polyline positions={paths}>`
+   onde `positions` é o **array de todas as paths da bacia** (não um Polyline por
+   trecho). Colapsa dezenas/centenas de milhares de elementos React + objetos
+   Leaflet em **um por bacia** → sem teto de reconciliação. `basinGroups` (useMemo)
+   agrupa `simplifiedLines` por `regionId` e achata as paths. Cada bacia tem seu
+   canvas próprio via `getBasinRenderer(regionId)` (pool por chave, reutilizado).
+   - Observação: um único canvas Leaflet satura ~40k **camadas** (objetos), mas
+     **uma** multi-polyline é UMA camada (com muitas sub-paths) → não satura.
 
-2. **Popups adiantados travam o navegador.** Renderizar `<Popup>` para os 43k
-   trechos de uma vez congela a aba. → O popup é renderizado **só para o trecho sob
-   hover** (`pi === 0 && isHovered`).
+2. **Linhas NÃO-interativas + clique no nível do mapa.** As polylines são
+   `interactive={false}`. O clique é resolvido por `RiverClickHandler`
+   (`useMapEvents.click`) que chama `findNearestTributary(simplifiedLines, lat, lon,
+   tolDeg)` — acha o trecho mais próximo do ponto (distância ponto-segmento) com
+   **rejeição O(1) por bbox** (`t._bb`, pré-computado no `simplifiedLines`). Resolve
+   dois problemas de uma vez: (a) o **empilhamento de canvases** (um clique real só
+   atinge o canvas do topo, então hit-test por camada perdia rios das bacias de
+   baixo); (b) o **custo de hover** O(n) por mousemove.
 
-3. **Hitbox SVG por trecho explode o DOM** (~43k nós `<path>` → paint sufoca, até o
-   screenshot trava). → Removida; hover/clique ficam na **linha visível (canvas)**
-   com `tolerance: 8` px no renderer.
+3. **Popup por CLIQUE, posicionado.** `RiverPopup` é um único `<Popup
+   position={latlng}>` aberto no ponto clicado (NÃO um `<Popup>` por trecho — isso
+   congelava; e NÃO via `bindPopup`, que só abre no 2º clique). `BasinLayer` é
+   `React.memo` para não re-renderizar a malha a cada clique.
 
-4. **Vazamento de `<canvas>`:** criar um renderer novo a cada montagem (e não
-   removê-lo) acumula canvases ao trocar de país (4→13→19…). → O pool
-   `getBasinRenderer` **reutiliza por `regionId`**, então o nº de canvases fica
-   limitado (~10) e estável. (Tentar remover no `unmount` quebrou o redesenho ao
-   remontar — não faça isso.)
-
-5. **Cache:** após regenerar dados, **bump `_TRIB_VERSION`** em `main.jsx` para
+4. **Cache:** após regenerar dados, **bump `_TRIB_VERSION`** em `main.jsx` para
    invalidar o singleton `globalThis.__pescamon_trib__`.
 
-6. **Custo de hover conhecido (em aberto):** mudar o hover re-renderiza o
-   `BasinLayer` inteiro (~38k elementos) → pode dar ~250 ms de lag em bacias muito
-   densas. Conserto futuro: extrair um componente de linha `React.memo`. Decidido
-   deixar como está por ora.
+5. **Densidade:** com a multi-polyline, o limite deixou de ser o nº de trechos e
+   passou a ser **download/parse** (JSON grande) + criação de LatLngs. SC em
+   Strahler>=2 = ~168k trechos / ~43 MB. Calibre o limiar por bacia pensando no peso
+   do arquivo, não mais no teto de render.
 
-> Dica de verificação: o `getImageData` do canvas às vezes retorna 0 pixels mesmo
-> com o mapa renderizado (off-screen/timing). **Confie no screenshot**, não na
-> contagem de pixels, para validar render neste app.
+> Dica de verificação: o `getImageData` direto do canvas costuma retornar 0 mesmo
+> com o mapa renderizado (off-screen/timing). Para confirmar pixels, **copie o
+> canvas via `drawImage` para um canvas novo e leia de lá** — aí a contagem é
+> confiável. (Screenshots no ambiente de preview às vezes travam com a malha densa.)
 
 ---
 
