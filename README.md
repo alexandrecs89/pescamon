@@ -364,7 +364,8 @@ No Netlify: Site settings → Environment variables → adicionar as mesmas duas
 
 #### 🥇 Alta prioridade — diferencial visual (estilo Windy, sobre o nosso heatmap)
 
-- [ ] **Camadas ambientais no mapa** (item 🥇.1 da análise): temperatura da água (gradiente), intensidade de vazão, vento e pressão como overlays toggláveis com legenda — dados Open-Meteo que já buscamos. _Em desenvolvimento._
+- [x] **Camada ambiental — temperatura da água**: overlay de canvas (campo contínuo por gradiente radial) sobre o mapa, toggle "Temp. água" + legenda; grade Open-Meteo (1 chamada multi-coordenada) recortada à fronteira; não-interativa (rios seguem clicáveis por cima). Base para as próximas camadas.
+- [ ] **Mais camadas ambientais**: vazão, vento (partículas) e pressão, reusando o mesmo `EnvCanvasLayer` + seletor de camada.
 - [ ] **Timeline de atividade ("bite time")** por local/espécie: score temporal (tipo 4×6h do Windy) com solunar + pressão (`pressureSensitivity`) + clima.
 - [ ] **Polir o heatmap de espécie**: gradiente contínuo + legenda + slider de tempo (varrer o forecast recolorindo o mapa).
 
