@@ -360,7 +360,13 @@ No Netlify: Site settings → Environment variables → adicionar as mesmas duas
 
 ### 🔄 Próximos passos (roadmap)
 
-> **Foco atual:** RS e SC entregues com dados oficiais (hidrografia + áreas + legislação + espécies). O seletor geográfico comporta os 27 estados. O próximo objetivo é **escalar para mais estados** reduzindo o trabalho manual a cada novo.
+> **Foco atual:** RS e SC entregues com dados oficiais. O seletor geográfico comporta os 27 estados. Duas frentes em paralelo: **escalar territorialmente** e **fechar o gap visual com os concorrentes** (ver `docs/ANALISE-CONCORRENCIA.md`).
+
+#### 🥇 Alta prioridade — diferencial visual (estilo Windy, sobre o nosso heatmap)
+
+- [ ] **Camadas ambientais no mapa** (item 🥇.1 da análise): temperatura da água (gradiente), intensidade de vazão, vento e pressão como overlays toggláveis com legenda — dados Open-Meteo que já buscamos. _Em desenvolvimento._
+- [ ] **Timeline de atividade ("bite time")** por local/espécie: score temporal (tipo 4×6h do Windy) com solunar + pressão (`pressureSensitivity`) + clima.
+- [ ] **Polir o heatmap de espécie**: gradiente contínuo + legenda + slider de tempo (varrer o forecast recolorindo o mapa).
 
 #### 🥇 Alta prioridade — escalar territorialmente
 
