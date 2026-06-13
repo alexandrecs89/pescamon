@@ -364,8 +364,9 @@ No Netlify: Site settings → Environment variables → adicionar as mesmas duas
 
 #### 🥇 Alta prioridade — diferencial visual (estilo Windy, sobre o nosso heatmap)
 
-- [x] **Camada ambiental — temperatura da água**: overlay de canvas (campo contínuo por gradiente radial) sobre o mapa, toggle "Temp. água" + legenda; grade Open-Meteo (1 chamada multi-coordenada) recortada à fronteira; não-interativa (rios seguem clicáveis por cima). Base para as próximas camadas.
-- [ ] **Mais camadas ambientais**: vazão, vento (partículas) e pressão, reusando o mesmo `EnvCanvasLayer` + seletor de camada.
+- [x] **Camadas ambientais no mapa** (estilo Windy): seletor "Ambiente" com **Temp. água · Vento · Pressão** — campo contínuo por gradiente radial (`EnvCanvasLayer`, config-driven em `ENV_LAYERS`), legenda kind-aware; o vento ainda desenha **setas de direção**. Grade Open-Meteo (1 chamada multi-coordenada) recortada à fronteira; não-interativas (rios seguem clicáveis por cima).
+- [ ] **Vazão como coloração da rede**: a vazão é propriedade do rio (não um campo sobre o terreno), então entra como camada que colore os próprios trechos por descarga (GloFAS), não no `EnvCanvasLayer`.
+- [ ] **Slider de tempo**: varrer o forecast recolorindo as camadas ambientais e o heatmap de espécie.
 - [ ] **Timeline de atividade ("bite time")** por local/espécie: score temporal (tipo 4×6h do Windy) com solunar + pressão (`pressureSensitivity`) + clima.
 - [ ] **Polir o heatmap de espécie**: gradiente contínuo + legenda + slider de tempo (varrer o forecast recolorindo o mapa).
 

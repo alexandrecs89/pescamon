@@ -4345,6 +4345,7 @@ function App() {
   const [envLayer, setEnvLayer] = useState(null);
   const [envGrid, setEnvGrid] = useState(null);
   const [envLoading, setEnvLoading] = useState(false);
+  const [envMenuOpen, setEnvMenuOpen] = useState(false);
   const [spotModal, setSpotModal] = useState(null); // null | { lat, lng } | { spot } (view mode)
   const [spotForm, setSpotForm] = useState({ name: '', description: '', access_type: 'bank', species_ids: [], species_names: [] });
   const [spotSaving, setSpotSaving] = useState(false);
@@ -4356,12 +4357,13 @@ function App() {
   const [watercourseSearch, setWatercourseSearch] = useState('');
   const [selectedRegion, setSelectedRegion] = useState(null);
   const [selectedCountry, setSelectedCountry] = useState(() => loadSavedCountry() || 'UY');
-  // Busca a grade da camada ambiental quando ativada / ao trocar de país.
+  // Busca a grade da camada ambiental quando ativada / ao trocar de país ou camada.
   useEffect(() => {
-    if (envLayer !== 'watertemp') { setEnvGrid(null); return; }
+    setEnvGrid(null);
+    if (!envLayer) return;
     let cancelled = false;
     setEnvLoading(true);
-    fetchEnvWaterTempGrid(selectedCountry)
+    fetchEnvGrid(selectedCountry, envLayer)
       .then(g => { if (!cancelled) setEnvGrid(g); })
       .catch(() => { if (!cancelled) setEnvGrid(null); })
       .finally(() => { if (!cancelled) setEnvLoading(false); });
@@ -6296,14 +6298,30 @@ function App() {
             >
               <MapPin size={13} /> Postos
             </button>
-            <button
-              type="button"
-              className={`map-toggle-btn${envLayer === 'watertemp' ? ' active' : ''}`}
-              onClick={() => setEnvLayer((v) => v === 'watertemp' ? null : 'watertemp')}
-              title="Camada de temperatura da água (Open-Meteo)"
-            >
-              <ThermometerSun size={13} /> {envLoading ? 'Temp…' : 'Temp. água'}
-            </button>
+            <div style={{ position: 'relative' }}>
+              <button
+                type="button"
+                className={`map-toggle-btn${envLayer ? ' active' : ''}`}
+                onClick={() => setEnvMenuOpen((v) => !v)}
+                title="Camadas ambientais (Open-Meteo)"
+              >
+                <ThermometerSun size={13} /> {envLayer ? `${ENV_LAYERS[envLayer].emoji} ${ENV_LAYERS[envLayer].label}` : 'Ambiente'}{envLoading ? '…' : ''} <ChevronDown size={11} style={{ opacity: 0.6 }} />
+              </button>
+              {envMenuOpen && (
+                <div style={{ position: 'absolute', top: 'calc(100% + 4px)', left: 0, zIndex: 1500, background: 'var(--bg-surface)', border: '1px solid var(--border-faint2)', borderRadius: 8, overflow: 'hidden', boxShadow: 'var(--shadow-modal)', minWidth: 150 }}>
+                  {[['', '⛔ Desligar'], ['watertemp', '🌡️ Temp. água'], ['wind', '💨 Vento'], ['pressure', '🎈 Pressão']].map(([k, lbl]) => {
+                    const active = (envLayer || '') === k;
+                    return (
+                      <button key={k || 'off'} type="button"
+                        onClick={() => { setEnvLayer(k || null); setEnvMenuOpen(false); }}
+                        style={{ width: '100%', textAlign: 'left', padding: '8px 11px', background: active ? 'rgba(59,130,246,0.16)' : 'transparent', border: 'none', borderBottom: '1px solid var(--border-faint)', color: active ? '#60a5fa' : 'var(--text-primary)', cursor: 'pointer', fontSize: '0.8rem', fontWeight: active ? 700 : 400 }}>
+                        {lbl}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
           </div>
           <MapContainer center={mapCenter} zoom={mapZoom} scrollWheelZoom className="map" style={{ height: '100%' }}>
           {console.log('[DEBUG] MapContainer render - mapCenter:', mapCenter, 'mapZoom:', mapZoom)}
@@ -6315,8 +6333,8 @@ function App() {
           <MapClickHandler onMapClick={handleMapClick} registering={registering} />
           <SpotClickHandler onRightClick={(lat, lng) => { setSpotModal({ lat, lng }); setSpotForm({ name:'', description:'', access_type:'bank', species_ids:[], species_names:[] }); }} />
 
-          {/* Camada ambiental (temperatura da água) — sob os rios, não-interativa */}
-          {envLayer === 'watertemp' && envGrid && <EnvCanvasLayer grid={envGrid} />}
+          {/* Camada ambiental — sob os rios, não-interativa */}
+          {envLayer && envGrid && <EnvCanvasLayer grid={envGrid} />}
 
           {/* IoT Sensors Layer */}
           {iotSensors.map(sensor => (
@@ -6874,14 +6892,15 @@ function App() {
             </Marker>
           )}
         </MapContainer>
-          {envLayer === 'watertemp' && (
+          {envLayer && ENV_LAYERS[envLayer] && (
             <div style={{ position:'absolute', left:10, bottom:26, zIndex:1000, background:'rgba(15,23,42,0.86)', border:'1px solid rgba(255,255,255,0.12)', borderRadius:8, padding:'7px 10px', pointerEvents:'none' }}>
-              <div style={{ fontSize:'0.7rem', color:'#cbd5e1', marginBottom:5, fontWeight:600 }}>🌡️ Temperatura da água{envLoading ? ' · carregando…' : ''}</div>
+              <div style={{ fontSize:'0.7rem', color:'#cbd5e1', marginBottom:5, fontWeight:600 }}>{ENV_LAYERS[envLayer].emoji} {ENV_LAYERS[envLayer].label}{envLoading ? ' · carregando…' : ''}</div>
               <div style={{ display:'flex', alignItems:'center', gap:6 }}>
-                <span style={{ fontSize:'0.62rem', color:'#94a3b8' }}>6°</span>
-                <div style={{ width:120, height:10, borderRadius:5, background:'linear-gradient(90deg, rgb(37,99,235), rgb(6,182,212), rgb(34,197,94), rgb(234,179,8), rgb(249,115,22), rgb(239,68,68))' }} />
-                <span style={{ fontSize:'0.62rem', color:'#94a3b8' }}>31°+</span>
+                <span style={{ fontSize:'0.62rem', color:'#94a3b8' }}>{ENV_LAYERS[envLayer].domain[0]}</span>
+                <div style={{ width:120, height:10, borderRadius:5, background: _envGradientCss(ENV_LAYERS[envLayer]) }} />
+                <span style={{ fontSize:'0.62rem', color:'#94a3b8' }}>{ENV_LAYERS[envLayer].domain[1]} {ENV_LAYERS[envLayer].unit}</span>
               </div>
+              {envLayer === 'wind' && <div style={{ fontSize:'0.6rem', color:'#64748b', marginTop:3 }}>setas = direção do vento</div>}
             </div>
           )}
           <MapLegend
@@ -8018,25 +8037,58 @@ function RiverPopup({ picked, color, species, waterQualityData, occurrences, onC
   );
 }
 
-// ── Camada ambiental (estilo Windy) — campo contínuo sobre o mapa ────────────
-// Escala de cor por temperatura da água (°C): frio→azul, quente→vermelho.
-function _tempColor(t) {
-  const stops = [[6,[37,99,235]],[12,[6,182,212]],[18,[34,197,94]],[22,[234,179,8]],[26,[249,115,22]],[31,[239,68,68]]];
-  if (t <= stops[0][0]) return stops[0][1];
-  if (t >= stops[stops.length-1][0]) return stops[stops.length-1][1];
-  for (let i=1;i<stops.length;i++) if (t<=stops[i][0]) {
-    const [t0,c0]=stops[i-1], [t1,c1]=stops[i], f=(t-t0)/(t1-t0);
+// ── Camadas ambientais (estilo Windy) — campos contínuos sobre o mapa ─────────
+// Cada camada: variável(is) Open-Meteo, como derivar o valor, domínio e escala de
+// cor (paradas [valor, [r,g,b]]). Vazão NÃO entra aqui (é propriedade do rio, não
+// um campo sobre o terreno) — fica como coloração da rede, em item à parte.
+const ENV_LAYERS = {
+  watertemp: {
+    label: 'Temp. água', emoji: '🌡️', unit: '°C',
+    om: 'temperature_2m,soil_temperature_0_to_7cm',
+    value: (c) => estimateWaterTemperature(c.temperature_2m, c.soil_temperature_0_to_7cm ?? null),
+    domain: [6, 31],
+    stops: [[6,[37,99,235]],[12,[6,182,212]],[18,[34,197,94]],[22,[234,179,8]],[26,[249,115,22]],[31,[239,68,68]]],
+  },
+  wind: {
+    label: 'Vento', emoji: '💨', unit: 'km/h',
+    om: 'wind_speed_10m,wind_direction_10m',
+    value: (c) => c.wind_speed_10m,
+    dir: (c) => c.wind_direction_10m,
+    arrows: true,
+    domain: [0, 40],
+    stops: [[0,[14,165,165]],[8,[34,197,94]],[16,[234,179,8]],[26,[249,115,22]],[40,[239,68,68]]],
+  },
+  pressure: {
+    label: 'Pressão', emoji: '🎈', unit: 'hPa',
+    om: 'surface_pressure',
+    value: (c) => c.surface_pressure,
+    domain: [1000, 1028],
+    // diverging: baixa (frente, peixe ativo) vermelho → ideal verde → alta azul (letargia)
+    stops: [[1000,[239,68,68]],[1009,[249,115,22]],[1015,[34,197,94]],[1021,[6,182,212]],[1028,[37,99,235]]],
+  },
+};
+
+function _envColor(stops, v) {
+  if (v <= stops[0][0]) return stops[0][1];
+  if (v >= stops[stops.length-1][0]) return stops[stops.length-1][1];
+  for (let i=1;i<stops.length;i++) if (v<=stops[i][0]) {
+    const [t0,c0]=stops[i-1],[t1,c1]=stops[i],f=(v-t0)/(t1-t0);
     return c0.map((c,j)=>Math.round(c+(c1[j]-c)*f));
   }
   return stops[stops.length-1][1];
 }
+// CSS linear-gradient para a legenda (a partir das paradas e do domínio)
+function _envGradientCss(cfg) {
+  const [d0,d1] = cfg.domain;
+  return 'linear-gradient(90deg,' + cfg.stops.map(([v,[r,g,b]]) => `rgb(${r},${g},${b}) ${Math.round(100*(v-d0)/(d1-d0))}%`).join(',') + ')';
+}
 
-// Busca uma grade de valores ambientais (temp. da água) sobre o bbox do país,
-// recortada à fronteira oficial quando disponível. Uma única chamada Open-Meteo
-// (multi-coordenada). Reusa estimateWaterTemperature (proxy soil 0-7cm).
-async function fetchEnvWaterTempGrid(country) {
+// Busca uma grade de valores da camada `kind` sobre o bbox do país, recortada à
+// fronteira oficial. Uma única chamada Open-Meteo (multi-coordenada).
+async function fetchEnvGrid(country, kind) {
+  const cfg = ENV_LAYERS[kind];
   const c = COUNTRIES.find(x => x.id === country);
-  if (!c?.bbox) return null;
+  if (!cfg || !c?.bbox) return null;
   const { minLat, maxLat, minLon, maxLon } = c.bbox;
   const step = 0.6;
   const rings = getBoundaryRings(country);
@@ -8051,7 +8103,7 @@ async function fetchEnvWaterTempGrid(country) {
       pts.push([+la.toFixed(3), +lo.toFixed(3)]);
     }
   if (!pts.length) return null;
-  const url = `https://api.open-meteo.com/v1/forecast?latitude=${pts.map(p=>p[0]).join(',')}&longitude=${pts.map(p=>p[1]).join(',')}&current=temperature_2m,soil_temperature_0_to_7cm&timezone=auto`;
+  const url = `https://api.open-meteo.com/v1/forecast?latitude=${pts.map(p=>p[0]).join(',')}&longitude=${pts.map(p=>p[1]).join(',')}&current=${cfg.om}&timezone=auto`;
   const res = await fetch(url);
   if (!res.ok) return null;
   const data = await res.json();
@@ -8059,18 +8111,22 @@ async function fetchEnvWaterTempGrid(country) {
   const out = [];
   for (let i = 0; i < pts.length; i++) {
     const cur = arr[i]?.current;
-    if (!cur || cur.temperature_2m == null) continue;
-    out.push({ lat: pts[i][0], lng: pts[i][1], value: estimateWaterTemperature(cur.temperature_2m, cur.soil_temperature_0_to_7cm ?? null) });
+    if (!cur) continue;
+    const v = cfg.value(cur);
+    if (v == null || Number.isNaN(v)) continue;
+    out.push({ lat: pts[i][0], lng: pts[i][1], value: v, dir: cfg.dir ? cfg.dir(cur) : null });
   }
-  return out.length ? { points: out, step } : null;
+  return out.length ? { points: out, step, kind } : null;
 }
 
 // Overlay de canvas que desenha um campo contínuo (gradientes radiais por ponto da
-// grade). Não-interativo (pointer-events: none) — os rios seguem clicáveis por baixo.
+// grade) + setas (vento). Não-interativo — os rios seguem clicáveis por baixo.
 function EnvCanvasLayer({ grid, opacity = 0.5 }) {
   const map = useMap();
   useEffect(() => {
     if (!map || !grid?.points?.length || !window.L) return;
+    const cfg = ENV_LAYERS[grid.kind];
+    if (!cfg) return;
     const L = window.L;
     const canvas = L.DomUtil.create('canvas', 'leaflet-zoom-animated');
     canvas.style.pointerEvents = 'none';
@@ -8081,16 +8137,16 @@ function EnvCanvasLayer({ grid, opacity = 0.5 }) {
       L.DomUtil.setPosition(canvas, map.containerPointToLayerPoint([0, 0]));
       const ctx = canvas.getContext('2d');
       ctx.clearRect(0, 0, size.x, size.y);
-      // raio = ~1.4× o passo da grade em pixels (campo suave, sem buracos)
       const c0 = map.latLngToContainerPoint([grid.points[0].lat, grid.points[0].lng]);
       const c1 = map.latLngToContainerPoint([grid.points[0].lat + grid.step, grid.points[0].lng]);
       const stepPx = Math.max(24, Math.abs(c1.y - c0.y));
       const R = stepPx * 1.45;
+      // 1) campo de cor
       ctx.globalAlpha = opacity;
       for (const p of grid.points) {
         const cp = map.latLngToContainerPoint([p.lat, p.lng]);
         if (cp.x < -R || cp.x > size.x + R || cp.y < -R || cp.y > size.y + R) continue;
-        const [r, g, b] = _tempColor(p.value);
+        const [r, g, b] = _envColor(cfg.stops, p.value);
         const grd = ctx.createRadialGradient(cp.x, cp.y, 0, cp.x, cp.y, R);
         grd.addColorStop(0, `rgba(${r},${g},${b},1)`);
         grd.addColorStop(1, `rgba(${r},${g},${b},0)`);
@@ -8098,6 +8154,30 @@ function EnvCanvasLayer({ grid, opacity = 0.5 }) {
         ctx.beginPath(); ctx.arc(cp.x, cp.y, R, 0, Math.PI * 2); ctx.fill();
       }
       ctx.globalAlpha = 1;
+      // 2) setas (vento) — apontam para onde o vento vai (dir meteorológica + 180°)
+      if (cfg.arrows) {
+        const len = Math.min(stepPx * 0.55, 26);
+        ctx.strokeStyle = 'rgba(255,255,255,0.9)';
+        ctx.fillStyle = 'rgba(255,255,255,0.9)';
+        ctx.lineWidth = 1.4;
+        for (const p of grid.points) {
+          if (p.dir == null) continue;
+          const cp = map.latLngToContainerPoint([p.lat, p.lng]);
+          if (cp.x < 0 || cp.x > size.x || cp.y < 0 || cp.y > size.y) continue;
+          const th = (p.dir + 180) * Math.PI / 180;
+          const dx = Math.sin(th), dy = -Math.cos(th);
+          const x0 = cp.x - dx * len / 2, y0 = cp.y - dy * len / 2;
+          const x1 = cp.x + dx * len / 2, y1 = cp.y + dy * len / 2;
+          ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1, y1); ctx.stroke();
+          // ponta da seta
+          const ah = 5, aa = 0.5;
+          ctx.beginPath();
+          ctx.moveTo(x1, y1);
+          ctx.lineTo(x1 - ah * (dx * Math.cos(aa) - dy * Math.sin(aa)), y1 - ah * (dy * Math.cos(aa) + dx * Math.sin(aa)));
+          ctx.lineTo(x1 - ah * (dx * Math.cos(-aa) - dy * Math.sin(-aa)), y1 - ah * (dy * Math.cos(-aa) + dx * Math.sin(-aa)));
+          ctx.closePath(); ctx.fill();
+        }
+      }
     };
     draw();
     map.on('moveend zoomend viewreset resize', draw);
