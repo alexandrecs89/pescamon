@@ -34,9 +34,11 @@ const SET_MIN_STRAHLER = 1; // rede de classificação (inclui capilares)
 // Limiar de SAÍDA por bacia (calibrar com --dry; ajustável por env SC_URU/SC_ATL).
 // SC é muito densa na vertente atlântica (Serra do Mar) → limiar mais alto que no RS
 // para manter o total na casa das dezenas de milhares (teto de render).
+// Render por multi-polyline (uma por bacia) suporta redes muito densas, então usamos
+// Strahler>=2 nas duas bacias para incluir os rios menores (~168k trechos).
 const BASIN_MIN_STRAHLER = {
-  bacia_uruguai: +(process.env.SC_URU || 4),
-  vertente_atlantica: +(process.env.SC_ATL || 4),
+  bacia_uruguai: +(process.env.SC_URU || 2),
+  vertente_atlantica: +(process.env.SC_ATL || 2),
 };
 
 // Bbox generoso de SC (filtro rápido R-tree; recorte fino vem do polígono IBGE)

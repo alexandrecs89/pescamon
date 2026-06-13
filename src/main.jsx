@@ -1518,7 +1518,7 @@ const extraRiversCache = {}; // Resetado para v5-state-filtered
 // — sobrevive ao HMR do Vite (que reexecuta o módulo)
 // — o bloco de carregamento só roda se tilesLoaded === false
 // ============================================================
-const _TRIB_VERSION = 'v49-br-sc'; // + Santa Catarina (BHO 2017, 2 bacias: Uruguai + Vertente Atlântica, DP simplificado)
+const _TRIB_VERSION = 'v50-sc-dense'; // SC denso (Strahler>=2, ~168k trechos) — render por multi-polyline por bacia
 if (!globalThis.__pescamon_trib__ || globalThis.__pescamon_trib__._version !== _TRIB_VERSION) {
   console.log('[TRIB] Resetando singleton para versão', _TRIB_VERSION);
   globalThis.__pescamon_trib__ = {
@@ -7812,6 +7812,9 @@ function findNearestTributary(tribs, lat, lon, tolDeg) {
   const tol2 = tolDeg * tolDeg;
   let best = null, bestD = tol2;
   for (const t of tribs) {
+    // rejeição O(1) por bbox (com folga de tolerância) — barato mesmo com 100k+ trechos
+    const bb = t._bb;
+    if (bb && (lat < bb[0] - tolDeg || lat > bb[2] + tolDeg || lon < bb[1] - tolDeg || lon > bb[3] + tolDeg)) continue;
     for (const path of t.paths) {
       for (let i = 1; i < path.length; i++) {
         const d = _distPointToSegSq(lat, lon, path[i - 1][0], path[i - 1][1], path[i][0], path[i][1]);
@@ -7827,23 +7830,21 @@ const _wcTypeIcon = (t) => ({ rio: '🌊', canada: '🌿', quebrada: '⛰️', c
 const _wcTypeLabel = (t) => ({ rio: 'Rio', canada: 'Cañada', quebrada: 'Quebrada', canal: 'Canal' }[t] || 'Arroio');
 const _fmtFishKg = (kg) => !kg ? 'desconhecido' : kg < 1 ? `${Math.round(kg * 1000)}g` : `${kg}kg`;
 
-// Camada de rios de uma bacia. NÃO-interativa (o clique é resolvido pelo
-// RiverClickHandler no nível do mapa). Memoizada: como os rios são estáticos, não
-// deve re-renderizar a cada clique/hover (re-renderizar dezenas de milhares de
-// polylines congelaria a aba). Só re-renderiza quando os próprios dados/zoom mudam.
-const BasinLayer = React.memo(function BasinLayer({ tributaries, color, regionId, lineWeight }) {
+// Camada de rios de uma bacia. Renderiza TODOS os trechos como UMA ÚNICA multi-polyline
+// (positions = array de paths), em vez de um <Polyline> por trecho. Isso colapsa dezenas
+// de milhares de elementos React/objetos Leaflet em um só → permite redes muito densas
+// (100k+ trechos) sem travar a reconciliação nem saturar o canvas por contagem de camadas.
+// NÃO-interativa: o clique é resolvido pelo RiverClickHandler no nível do mapa. Memoizada
+// (positions é estável entre cliques) para não redesenhar à toa.
+const BasinLayer = React.memo(function BasinLayer({ positions, color, regionId, lineWeight }) {
   const renderer = getBasinRenderer(regionId || 'default');
-  return <>
-    {tributaries.map(t => {
-      const w = t.waterway === 'river' ? lineWeight : lineWeight * 0.7;
-      return t.paths.map((path, pi) => (
-        <Polyline key={`bc-${t.id}-${pi}`} positions={path} interactive={false}
-          pathOptions={{ color, weight: w, opacity: 0.7, lineCap: 'round', lineJoin: 'round' }}
-          renderer={renderer}
-        />
-      ));
-    })}
-  </>;
+  if (!positions || !positions.length) return null;
+  return (
+    <Polyline positions={positions} interactive={false}
+      pathOptions={{ color, weight: lineWeight, opacity: 0.7, lineCap: 'round', lineJoin: 'round' }}
+      renderer={renderer}
+    />
+  );
 });
 
 // Handler de clique no nível do mapa: acha o trecho mais próximo do clique (entre todas
@@ -8014,18 +8015,28 @@ function AllWatercourses({ tributaryLines, waterQualityData, species, occurrence
     // (Removido o diagnóstico legado do RS que iterava todos os trechos acima de
     //  -27.08 — em SC quase toda a malha está nessa faixa e o log travava a aba.)
 
-    return filtered.map(t => ({ ...t, paths: t.paths.map(p => _simplifyBasinPath(p, simplifyStep)) }));
+    return filtered.map(t => {
+      const paths = t.paths.map(p => _simplifyBasinPath(p, simplifyStep));
+      // bbox do trecho — usado para rejeição O(1) na busca por clique
+      let minLat = 99, maxLat = -99, minLon = 999, maxLon = -999;
+      for (const p of paths) for (const [la, lo] of p) {
+        if (la < minLat) minLat = la; if (la > maxLat) maxLat = la;
+        if (lo < minLon) minLon = lo; if (lo > maxLon) maxLon = lo;
+      }
+      return { ...t, paths, _bb: [minLat, minLon, maxLat, maxLon] };
+    });
   }, [tributaryLines, activeBasins, simplifyStep, selectedCountry]);
 
-  // Agrupar por bacia para passar ao BasinLayer memoizado
-  const byBasin = useMemo(() => {
+  // Agrupar por bacia: todas as paths de cada bacia viram UMA multi-polyline (positions).
+  // Refs estáveis entre cliques (memo do BasinLayer).
+  const basinGroups = useMemo(() => {
     const groups = {};
     for (const t of simplifiedLines) {
       const rid = t.regionId || 'santa_lucia';
-      if (!groups[rid]) groups[rid] = [];
-      groups[rid].push(t);
+      const arr = (groups[rid] || (groups[rid] = []));
+      for (const p of t.paths) arr.push(p);
     }
-    return groups;
+    return Object.entries(groups).map(([rid, positions]) => ({ rid, positions }));
   }, [simplifiedLines]);
 
   // Se não há dados de tributários e geometria do Santa Lucía, não renderiza nada
@@ -8134,13 +8145,13 @@ function AllWatercourses({ tributaryLines, waterQualityData, species, occurrence
         </>
       )}
 
-      {/* Tributários agrupados por bacia (linhas não-interativas; clique via handler abaixo) */}
-      {Object.entries(byBasin).map(([rid, tribs]) => (
+      {/* Uma multi-polyline por bacia (linhas não-interativas; clique via handler abaixo) */}
+      {basinGroups.map(g => (
         <BasinLayer
-          key={`${rid}-${selectedCountry}`}
-          regionId={rid}
-          tributaries={tribs}
-          color={REGION_COLORS[rid] || '#3b82f6'}
+          key={`${g.rid}-${selectedCountry}`}
+          regionId={g.rid}
+          positions={g.positions}
+          color={REGION_COLORS[g.rid] || '#3b82f6'}
           lineWeight={lineWeight}
         />
       ))}
