@@ -7827,36 +7827,24 @@ const _wcTypeIcon = (t) => ({ rio: '🌊', canada: '🌿', quebrada: '⛰️', c
 const _wcTypeLabel = (t) => ({ rio: 'Rio', canada: 'Cañada', quebrada: 'Quebrada', canal: 'Canal' }[t] || 'Arroio');
 const _fmtFishKg = (kg) => !kg ? 'desconhecido' : kg < 1 ? `${Math.round(kg * 1000)}g` : `${kg}kg`;
 
-function BasinLayer({ tributaries, color, regionId, lineWeight, highlightId }) {
-  // Canvas próprio desta bacia, reutilizado entre montagens (pool por regionId em
-  // getBasinRenderer): distribui a carga e evita acúmulo de <canvas> ao trocar de país.
-  // As linhas são NÃO-interativas: o clique é resolvido por um único handler no nível
-  // do mapa (findNearestTributary), que não sofre com o empilhamento de canvases nem
-  // com o custo de hit-test por mousemove em dezenas de milhares de trechos.
+// Camada de rios de uma bacia. NÃO-interativa (o clique é resolvido pelo
+// RiverClickHandler no nível do mapa). Memoizada: como os rios são estáticos, não
+// deve re-renderizar a cada clique/hover (re-renderizar dezenas de milhares de
+// polylines congelaria a aba). Só re-renderiza quando os próprios dados/zoom mudam.
+const BasinLayer = React.memo(function BasinLayer({ tributaries, color, regionId, lineWeight }) {
   const renderer = getBasinRenderer(regionId || 'default');
-
   return <>
     {tributaries.map(t => {
-      const isActive = highlightId === t.id;
       const w = t.waterway === 'river' ? lineWeight : lineWeight * 0.7;
       return t.paths.map((path, pi) => (
-        <React.Fragment key={`bc-${t.id}-${pi}`}>
-          {isActive && (
-            <Polyline positions={path} interactive={false}
-              pathOptions={{ color, weight: w * 4, opacity: 0.25, lineCap: 'round', lineJoin: 'round' }}
-              renderer={renderer}
-            />
-          )}
-          <Polyline positions={path} interactive={false}
-            pathOptions={{ color: isActive ? '#fff' : color, weight: isActive ? w * 1.5 : w,
-              opacity: isActive ? 1 : 0.7, lineCap: 'round', lineJoin: 'round' }}
-            renderer={renderer}
-          />
-        </React.Fragment>
+        <Polyline key={`bc-${t.id}-${pi}`} positions={path} interactive={false}
+          pathOptions={{ color, weight: w, opacity: 0.7, lineCap: 'round', lineJoin: 'round' }}
+          renderer={renderer}
+        />
       ));
     })}
   </>;
-}
+});
 
 // Handler de clique no nível do mapa: acha o trecho mais próximo do clique (entre todas
 // as bacias visíveis) e abre o popup nele. Resolve o empilhamento de canvases.
@@ -7864,7 +7852,6 @@ function RiverClickHandler({ tributaries, onPick }) {
   const map = useMapEvents({
     click: (e) => {
       // tolerância ~12px convertida para graus no zoom atual
-      const c = map.getContainer().getBoundingClientRect();
       const p0 = map.containerPointToLatLng([0, 0]);
       const p1 = map.containerPointToLatLng([12, 0]);
       const tolDeg = Math.max(Math.abs(p1.lng - p0.lng), 1e-4);
@@ -8155,7 +8142,6 @@ function AllWatercourses({ tributaryLines, waterQualityData, species, occurrence
           tributaries={tribs}
           color={REGION_COLORS[rid] || '#3b82f6'}
           lineWeight={lineWeight}
-          highlightId={pickedRiver?.id}
         />
       ))}
 
