@@ -7796,109 +7796,146 @@ function _simplifyBasinPath(path, step) {
   return result;
 }
 
-function BasinLayer({ tributaries, color, regionId, lineWeight, hitWeight, waterQualityData, species, occurrences }) {
-  const [hoveredId, setHoveredId] = useState(null);
-  const [clicked, setClicked] = useState(null); // { id, latlng } — popup aberto por CLIQUE no ponto clicado
+// Distância² (graus²) de um ponto [lat,lon] ao segmento a→b. Plano local (ok p/ a escala).
+function _distPointToSegSq(plat, plon, alat, alon, blat, blon) {
+  const dy = blat - alat, dx = blon - alon;
+  const len2 = dy * dy + dx * dx;
+  let t = len2 ? ((plat - alat) * dy + (plon - alon) * dx) / len2 : 0;
+  t = t < 0 ? 0 : t > 1 ? 1 : t;
+  const ly = alat + t * dy, lx = alon + t * dx;
+  const ey = plat - ly, ex = plon - lx;
+  return ey * ey + ex * ex;
+}
+// Acha o trecho mais próximo de um ponto entre uma lista de tributários, dentro de uma
+// tolerância (em graus). Independe do canvas (resolve o empilhamento de renderers).
+function findNearestTributary(tribs, lat, lon, tolDeg) {
+  const tol2 = tolDeg * tolDeg;
+  let best = null, bestD = tol2;
+  for (const t of tribs) {
+    for (const path of t.paths) {
+      for (let i = 1; i < path.length; i++) {
+        const d = _distPointToSegSq(lat, lon, path[i - 1][0], path[i - 1][1], path[i][0], path[i][1]);
+        if (d < bestD) { bestD = d; best = t; }
+      }
+    }
+  }
+  return best;
+}
+
+// Ícone/label do tipo de curso (compartilhado entre camadas)
+const _wcTypeIcon = (t) => ({ rio: '🌊', canada: '🌿', quebrada: '⛰️', canal: '🏗️' }[t] || '〰️');
+const _wcTypeLabel = (t) => ({ rio: 'Rio', canada: 'Cañada', quebrada: 'Quebrada', canal: 'Canal' }[t] || 'Arroio');
+const _fmtFishKg = (kg) => !kg ? 'desconhecido' : kg < 1 ? `${Math.round(kg * 1000)}g` : `${kg}kg`;
+
+function BasinLayer({ tributaries, color, regionId, lineWeight, highlightId }) {
   // Canvas próprio desta bacia, reutilizado entre montagens (pool por regionId em
   // getBasinRenderer): distribui a carga e evita acúmulo de <canvas> ao trocar de país.
+  // As linhas são NÃO-interativas: o clique é resolvido por um único handler no nível
+  // do mapa (findNearestTributary), que não sofre com o empilhamento de canvases nem
+  // com o custo de hit-test por mousemove em dezenas de milhares de trechos.
   const renderer = getBasinRenderer(regionId || 'default');
-  const { lang: _blLang } = useLang();
-  const _blT = useT();
-
-  const formatSize = (kg) => !kg ? 'desconhecido' : kg < 1 ? `${Math.round(kg*1000)}g` : `${kg}kg`;
-  const getTypeIcon = (t) => ({ rio:'🌊', canada:'🌿', quebrada:'⛰️', canal:'🏗️' }[t] || '〰️');
-  const getTypeLabel = (t) => ({ rio:'Rio', canada:'Cañada', quebrada:'Quebrada', canal:'Canal' }[t] || 'Arroio'); // nome fixo do tipo de curso (próprio nome, não label UI)
 
   return <>
     {tributaries.map(t => {
-      const isActive = hoveredId === t.id || clicked?.id === t.id;
+      const isActive = highlightId === t.id;
       const w = t.waterway === 'river' ? lineWeight : lineWeight * 0.7;
-
       return t.paths.map((path, pi) => (
         <React.Fragment key={`bc-${t.id}-${pi}`}>
           {isActive && (
-            <Polyline positions={path}
+            <Polyline positions={path} interactive={false}
               pathOptions={{ color, weight: w * 4, opacity: 0.25, lineCap: 'round', lineJoin: 'round' }}
               renderer={renderer}
             />
           )}
-          <Polyline positions={path}
+          <Polyline positions={path} interactive={false}
             pathOptions={{ color: isActive ? '#fff' : color, weight: isActive ? w * 1.5 : w,
               opacity: isActive ? 1 : 0.7, lineCap: 'round', lineJoin: 'round' }}
             renderer={renderer}
-            eventHandlers={{
-              mouseover: () => setHoveredId(t.id),
-              mouseout: () => setHoveredId(null),
-              click: (e) => setClicked({ id: t.id, latlng: e.latlng }),
-            }}
           />
         </React.Fragment>
       ));
     })}
-
-    {/* Popup único, aberto no ponto clicado (evita o problema do bindPopup que só
-        abre no 2º clique e o flicker do hover). */}
-    {clicked && (() => {
-      const t = tributaries.find(x => x.id === clicked.id);
-      if (!t) return null;
-      const wcType = classifyWatercourse(t.name || '');
-      const allowedIds = SPECIES_BY_WATERCOURSE[wcType] || [];
-      const speciesList = allowedIds.map(id => species.find(s => s.id === id)).filter(Boolean)
-        .sort((a, b) => (b.maxSizeKg || 0) - (a.maxSizeKg || 0));
-      const hasBigFish = speciesList.some(s => BIG_FISH_SPECIES.has(s.id));
-      const qualityData = waterQualityData?.[t.id];
-      const qualityScore = qualityData?.quality_score || estimateWaterQualityHeuristic(t.name, wcType, 0, 0);
-      const courseOccurrences = (occurrences || []).filter(o => o.tributaryId === t.id || o.tributaryName === t.name).length;
-      return (
-        <Popup position={clicked.latlng} eventHandlers={{ remove: () => setClicked(null) }}>
-          <div style={{ minWidth: 210, maxWidth: 270, background: '#0f172a', padding: 12, borderRadius: 8, color: '#e5f6ff' }}>
-            <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:8 }}>
-              <span style={{ fontSize:'1.2rem' }}>{getTypeIcon(wcType)}</span>
-              <div>
-                <strong style={{ fontSize:'0.9rem', color:'#e5f6ff', display:'block' }}>{t.name}</strong>
-                <div style={{ fontSize:'0.72rem', color:'#94a3b8' }}>{getTypeLabel(wcType)}</div>
-              </div>
-            </div>
-            <div style={{ display:'flex', alignItems:'center', gap:6, marginBottom:10, padding:'5px 8px',
-              background: qualityScore < 50 ? 'rgba(239,68,68,0.15)' : qualityScore < 65 ? 'rgba(249,115,22,0.15)' : 'rgba(34,197,94,0.15)',
-              borderRadius:6 }}>
-              <Droplets size={13} color={qualityScore < 50 ? '#ef4444' : qualityScore < 65 ? '#f97316' : '#22c55e'} />
-              <span style={{ fontSize:'0.78rem', color: qualityScore < 50 ? '#ef4444' : qualityScore < 65 ? '#f97316' : '#22c55e' }}>
-                {_blT('popupQuality')}: <strong>{qualityScore}%</strong>{!qualityData && ` (${_blT('popupEst')})`}
-              </span>
-            </div>
-            {speciesList.length > 0 && (
-              <div style={{ marginBottom:8 }}>
-                <div style={{ fontSize:'0.7rem', color:'#64748b', marginBottom:4, textTransform:'uppercase' }}>{_blT('popupFish')} ({speciesList.length})</div>
-                {speciesList.slice(0,4).map(s => (
-                  <div key={s.id} style={{ display:'flex', alignItems:'center', gap:5, padding:'3px 6px', fontSize:'0.78rem' }}>
-                    <span style={{ width:7, height:7, borderRadius:'50%', background: s.color || color, flexShrink:0 }} />
-                    <span style={{ flex:1, color:'#e5f6ff' }}>{spName(s, _blLang)}</span>
-                    <span style={{ color:'#94a3b8' }}>{formatSize(s.maxSizeKg)}</span>
-                    {BIG_FISH_SPECIES.has(s.id) && <span>🐟</span>}
-                  </div>
-                ))}
-                {speciesList.length > 4 && <div style={{ fontSize:'0.72rem', color:'#64748b', padding:'2px 6px' }}>+{speciesList.length-4} {_blT('popupMoreSpecies')}</div>}
-              </div>
-            )}
-            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:6, padding:7, background:'rgba(255,255,255,0.04)', borderRadius:5 }}>
-              <div style={{ textAlign:'center' }}>
-                <div style={{ fontSize:'1rem', color:'#22c55e' }}>{courseOccurrences}</div>
-                <div style={{ fontSize:'0.68rem', color:'#64748b' }}>{_blT('navCatches')}</div>
-              </div>
-              <div style={{ textAlign:'center' }}>
-                <div style={{ fontSize:'1rem' }}>{hasBigFish ? '🐟' : '—'}</div>
-                <div style={{ fontSize:'0.68rem', color:'#64748b' }}>{hasBigFish ? _blT('popupBigFish') : _blT('popupNoRecord')}</div>
-              </div>
-            </div>
-            <div style={{ marginTop:8, padding:'6px 8px', background:'rgba(26,111,212,0.1)', borderRadius:5, fontSize:'0.72rem', color:'#7ab8f5', textAlign:'center' }}>
-              💡 {_blT('popupSelectHeatmap')}
-            </div>
-          </div>
-        </Popup>
-      );
-    })()}
   </>;
+}
+
+// Handler de clique no nível do mapa: acha o trecho mais próximo do clique (entre todas
+// as bacias visíveis) e abre o popup nele. Resolve o empilhamento de canvases.
+function RiverClickHandler({ tributaries, onPick }) {
+  const map = useMapEvents({
+    click: (e) => {
+      // tolerância ~12px convertida para graus no zoom atual
+      const c = map.getContainer().getBoundingClientRect();
+      const p0 = map.containerPointToLatLng([0, 0]);
+      const p1 = map.containerPointToLatLng([12, 0]);
+      const tolDeg = Math.max(Math.abs(p1.lng - p0.lng), 1e-4);
+      const t = findNearestTributary(tributaries, e.latlng.lat, e.latlng.lng, tolDeg);
+      onPick(t ? { id: t.id, t, latlng: e.latlng } : null);
+    },
+  });
+  return null;
+}
+
+// Popup de um curso d'água (aberto no ponto clicado).
+function RiverPopup({ picked, color, species, waterQualityData, occurrences, onClose }) {
+  const { lang } = useLang();
+  const T = useT();
+  const t = picked.t;
+  const wcType = classifyWatercourse(t.name || '');
+  const allowedIds = SPECIES_BY_WATERCOURSE[wcType] || [];
+  const speciesList = allowedIds.map(id => species.find(s => s.id === id)).filter(Boolean)
+    .sort((a, b) => (b.maxSizeKg || 0) - (a.maxSizeKg || 0));
+  const hasBigFish = speciesList.some(s => BIG_FISH_SPECIES.has(s.id));
+  const qualityData = waterQualityData?.[t.id];
+  const qualityScore = qualityData?.quality_score || estimateWaterQualityHeuristic(t.name, wcType, 0, 0);
+  const courseOccurrences = (occurrences || []).filter(o => o.tributaryId === t.id || o.tributaryName === t.name).length;
+  return (
+    <Popup position={picked.latlng} eventHandlers={{ remove: onClose }}>
+      <div style={{ minWidth: 210, maxWidth: 270, background: '#0f172a', padding: 12, borderRadius: 8, color: '#e5f6ff' }}>
+        <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:8 }}>
+          <span style={{ fontSize:'1.2rem' }}>{_wcTypeIcon(wcType)}</span>
+          <div>
+            <strong style={{ fontSize:'0.9rem', color:'#e5f6ff', display:'block' }}>{t.name}</strong>
+            <div style={{ fontSize:'0.72rem', color:'#94a3b8' }}>{_wcTypeLabel(wcType)}</div>
+          </div>
+        </div>
+        <div style={{ display:'flex', alignItems:'center', gap:6, marginBottom:10, padding:'5px 8px',
+          background: qualityScore < 50 ? 'rgba(239,68,68,0.15)' : qualityScore < 65 ? 'rgba(249,115,22,0.15)' : 'rgba(34,197,94,0.15)',
+          borderRadius:6 }}>
+          <Droplets size={13} color={qualityScore < 50 ? '#ef4444' : qualityScore < 65 ? '#f97316' : '#22c55e'} />
+          <span style={{ fontSize:'0.78rem', color: qualityScore < 50 ? '#ef4444' : qualityScore < 65 ? '#f97316' : '#22c55e' }}>
+            {T('popupQuality')}: <strong>{qualityScore}%</strong>{!qualityData && ` (${T('popupEst')})`}
+          </span>
+        </div>
+        {speciesList.length > 0 && (
+          <div style={{ marginBottom:8 }}>
+            <div style={{ fontSize:'0.7rem', color:'#64748b', marginBottom:4, textTransform:'uppercase' }}>{T('popupFish')} ({speciesList.length})</div>
+            {speciesList.slice(0,4).map(s => (
+              <div key={s.id} style={{ display:'flex', alignItems:'center', gap:5, padding:'3px 6px', fontSize:'0.78rem' }}>
+                <span style={{ width:7, height:7, borderRadius:'50%', background: s.color || color, flexShrink:0 }} />
+                <span style={{ flex:1, color:'#e5f6ff' }}>{spName(s, lang)}</span>
+                <span style={{ color:'#94a3b8' }}>{_fmtFishKg(s.maxSizeKg)}</span>
+                {BIG_FISH_SPECIES.has(s.id) && <span>🐟</span>}
+              </div>
+            ))}
+            {speciesList.length > 4 && <div style={{ fontSize:'0.72rem', color:'#64748b', padding:'2px 6px' }}>+{speciesList.length-4} {T('popupMoreSpecies')}</div>}
+          </div>
+        )}
+        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:6, padding:7, background:'rgba(255,255,255,0.04)', borderRadius:5 }}>
+          <div style={{ textAlign:'center' }}>
+            <div style={{ fontSize:'1rem', color:'#22c55e' }}>{courseOccurrences}</div>
+            <div style={{ fontSize:'0.68rem', color:'#64748b' }}>{T('navCatches')}</div>
+          </div>
+          <div style={{ textAlign:'center' }}>
+            <div style={{ fontSize:'1rem' }}>{hasBigFish ? '🐟' : '—'}</div>
+            <div style={{ fontSize:'0.68rem', color:'#64748b' }}>{hasBigFish ? T('popupBigFish') : T('popupNoRecord')}</div>
+          </div>
+        </div>
+        <div style={{ marginTop:8, padding:'6px 8px', background:'rgba(26,111,212,0.1)', borderRadius:5, fontSize:'0.72rem', color:'#7ab8f5', textAlign:'center' }}>
+          💡 {T('popupSelectHeatmap')}
+        </div>
+      </div>
+    </Popup>
+  );
 }
 
 // Componente para mostrar todos os cursos d'água quando nenhum está selecionado
@@ -7906,6 +7943,7 @@ function AllWatercourses({ tributaryLines, waterQualityData, species, occurrence
   const map = useMap();
   const [zoom, setZoom] = useState(map?.getZoom() || 11);
   const [hoveredId, setHoveredId] = useState(null);
+  const [pickedRiver, setPickedRiver] = useState(null); // { id, t, latlng } — rio clicado (popup)
   const { lang: _awLang } = useLang();
   const _awT = useT();
 
@@ -8109,7 +8147,7 @@ function AllWatercourses({ tributaryLines, waterQualityData, species, occurrence
         </>
       )}
 
-      {/* Tributários agrupados por bacia */}
+      {/* Tributários agrupados por bacia (linhas não-interativas; clique via handler abaixo) */}
       {Object.entries(byBasin).map(([rid, tribs]) => (
         <BasinLayer
           key={`${rid}-${selectedCountry}`}
@@ -8117,12 +8155,23 @@ function AllWatercourses({ tributaryLines, waterQualityData, species, occurrence
           tributaries={tribs}
           color={REGION_COLORS[rid] || '#3b82f6'}
           lineWeight={lineWeight}
-          hitWeight={hitWeight}
-          waterQualityData={waterQualityData}
-          species={species}
-          occurrences={occurrences}
+          highlightId={pickedRiver?.id}
         />
       ))}
+
+      {/* Clique no mapa → acha o rio mais próximo (entre todas as bacias) e abre o popup.
+          Resolve o empilhamento de canvases (clique real só atinge o canvas do topo). */}
+      <RiverClickHandler tributaries={simplifiedLines} onPick={setPickedRiver} />
+      {pickedRiver && (
+        <RiverPopup
+          picked={pickedRiver}
+          color={REGION_COLORS[pickedRiver.t?.regionId] || '#3b82f6'}
+          species={species}
+          waterQualityData={waterQualityData}
+          occurrences={occurrences}
+          onClose={() => setPickedRiver(null)}
+        />
+      )}
 
       {/* EXTRA_RIVERS — rios/lagoas "herói" legados (overlay na cor própria, ex.: Río
           Negro em azul). Desativado: a rede oficial por bacia já os cobre. */}
