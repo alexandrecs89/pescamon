@@ -5160,29 +5160,70 @@ function App() {
       waterQualityDesc: mainRiverQuality.description,
     };
     
-    const tributaries = tributaryLines.map((t) => {
-      const wcType = classifyWatercourse(t.name || '');
-      const allowedIds = SPECIES_BY_WATERCOURSE[wcType] || [];
-      const hasBig = allowedIds.some((id) => BIG_FISH_SPECIES.has(id));
-      const distKm = distToPath(t.paths);
-      const [cLat, cLon] = getCenter(t.paths);
-      const qualityInfo = getWaterQualityForCourse(t.id, t.name, wcType, cLat, cLon);
-      const tribSegs = scoredTributarySegments.filter((s) => s.tributaryName === t.name);
-      const avgProb = tribSegs.length > 0 ? Math.round(tribSegs.reduce((s, c) => s + c.probability, 0) / tribSegs.length) : 0;
-      const occ = occurrences.filter((o) => tribSegs.some((s) => s.id === o.cellId)).length;
-      return { 
-        id: t.id, name: t.name, type: wcType, paths: t.paths, distKm,
-        center: [cLat, cLon],
-        regionId: t.regionId,
-        hasBigFish: hasBig, bigFishDistKm: hasBig ? distKm : Infinity, 
-        occurrenceCount: occ, avgProb, 
-        waterQuality: qualityInfo.score,
-        waterQualitySource: qualityInfo.source,
-        waterQualitySourceName: qualityInfo.sourceName,
-        waterQualityIsReal: qualityInfo.isRealData,
-        waterQualityDesc: qualityInfo.description,
-      };
-    });
+    // Estados BR: a malha BHO tem 1 trecho por segmento (um rio = dezenas de trechos),
+    // e a maioria é "Sem nome". Em vez de despejar dezenas de milhares de trechos no
+    // seletor, AGRUPA por nome (+ bacia) → rios nomeados. Trechos sem nome seguem
+    // visíveis e clicáveis no mapa, mas fora do seletor nomeado.
+    const isBRState = /^BR-/.test(selectedCountry);
+    const baseRegion = (rid) => (rid || '').replace(/_(UY|AR|BR(-[A-Z]{2})?)$/, '');
+    let tributaries;
+    if (isBRState) {
+      const groups = new Map(); // `${nome}|${baseRegion}` -> { name, regionId, paths }
+      for (const t of tributaryLines) {
+        const nm = (t.name || '').trim();
+        if (!nm || /^sem nome$/i.test(nm)) continue;
+        const rb = baseRegion(t.regionId);
+        const key = `${nm}|${rb}`;
+        let g = groups.get(key);
+        if (!g) { g = { name: nm, regionId: t.regionId, paths: [] }; groups.set(key, g); }
+        for (const p of t.paths) g.paths.push(p);
+      }
+      tributaries = [...groups.values()].map((g) => {
+        const wcType = classifyWatercourse(g.name);
+        const allowedIds = SPECIES_BY_WATERCOURSE[wcType] || [];
+        const hasBig = allowedIds.some((id) => BIG_FISH_SPECIES.has(id));
+        const distKm = distToPath(g.paths);
+        const [cLat, cLon] = getCenter(g.paths);
+        const id = `${selectedCountry}:${g.regionId}:${g.name}`;
+        const qualityInfo = getWaterQualityForCourse(id, g.name, wcType, cLat, cLon);
+        const tribSegs = scoredTributarySegments.filter((s) => s.tributaryName === g.name);
+        const avgProb = tribSegs.length > 0 ? Math.round(tribSegs.reduce((s, c) => s + c.probability, 0) / tribSegs.length) : 0;
+        const occ = occurrences.filter((o) => tribSegs.some((s) => s.id === o.cellId)).length;
+        return {
+          id, name: g.name, type: wcType, paths: g.paths, distKm,
+          center: [cLat, cLon], regionId: g.regionId,
+          hasBigFish: hasBig, bigFishDistKm: hasBig ? distKm : Infinity,
+          occurrenceCount: occ, avgProb,
+          waterQuality: qualityInfo.score, waterQualitySource: qualityInfo.source,
+          waterQualitySourceName: qualityInfo.sourceName,
+          waterQualityIsReal: qualityInfo.isRealData, waterQualityDesc: qualityInfo.description,
+        };
+      });
+    } else {
+      tributaries = tributaryLines.map((t) => {
+        const wcType = classifyWatercourse(t.name || '');
+        const allowedIds = SPECIES_BY_WATERCOURSE[wcType] || [];
+        const hasBig = allowedIds.some((id) => BIG_FISH_SPECIES.has(id));
+        const distKm = distToPath(t.paths);
+        const [cLat, cLon] = getCenter(t.paths);
+        const qualityInfo = getWaterQualityForCourse(t.id, t.name, wcType, cLat, cLon);
+        const tribSegs = scoredTributarySegments.filter((s) => s.tributaryName === t.name);
+        const avgProb = tribSegs.length > 0 ? Math.round(tribSegs.reduce((s, c) => s + c.probability, 0) / tribSegs.length) : 0;
+        const occ = occurrences.filter((o) => tribSegs.some((s) => s.id === o.cellId)).length;
+        return {
+          id: t.id, name: t.name, type: wcType, paths: t.paths, distKm,
+          center: [cLat, cLon],
+          regionId: t.regionId,
+          hasBigFish: hasBig, bigFishDistKm: hasBig ? distKm : Infinity,
+          occurrenceCount: occ, avgProb,
+          waterQuality: qualityInfo.score,
+          waterQualitySource: qualityInfo.source,
+          waterQualitySourceName: qualityInfo.sourceName,
+          waterQualityIsReal: qualityInfo.isRealData,
+          waterQualityDesc: qualityInfo.description,
+        };
+      });
+    }
     // Rios e lagoas extras (Rio Negro, Yi, Uruguay, costa atlântica)
     const extraRivers = EXTRA_RIVERS.map((r) => {
       const paths = extraRiverGeometries[r.id] || [];
@@ -5736,16 +5777,18 @@ function App() {
             return 'bacia_rio_negro'; // fallback: interior
           }
 
-          // Distribui watercourseList por região
-          // — IDs explícitos (EXTRA_RIVERS, __santa_lucia__) usam wcToRegion
-          // — tributários carregados dos GeoJSONs têm regionId embutido
-          // — fallback: classificação geográfica por centroide
+          // Distribui watercourseList por região (país-ciente).
+          // — UY: REGIONS (macro-regiões); itens via wcToRegion / regionId / centroide.
+          // — Estados BR: as bacias do estado (BASINS_BY_COUNTRY); a chave é o regionId
+          //   SEM o sufixo de país (ex.: 'bacia_jacui_BR-RS' → 'bacia_jacui').
+          const isBR = /^BR-/.test(selectedCountry);
+          const stripCountry = (rid) => (rid || '').replace(/_(UY|AR|BR(-[A-Z]{2})?)$/, '');
           const byRegion = {};
           for (const w of watercourseList) {
             let rid = wcToRegion[w.id];
-            if (!rid && w.regionId) rid = w.regionId;
+            if (!rid && w.regionId) rid = isBR ? stripCountry(w.regionId) : w.regionId;
             if (!rid && w.center) rid = regionForCenter(w.center[0], w.center[1]);
-            rid = rid || 'bacia_plata';
+            rid = rid || (isBR ? 'vertente_atlantica' : 'bacia_plata');
             if (!byRegion[rid]) byRegion[rid] = [];
             byRegion[rid].push(w);
           }
@@ -5754,13 +5797,25 @@ function App() {
             byRegion[rid].sort((a, b) => a.distKm - b.distKm);
           }
 
-          // Calcula distância mínima de cada região para ordenar regiões por proximidade
+          // Lista de regiões a exibir: UY = REGIONS; BR = bacias do estado (com center/
+          // zoom do estado e watercourseIds derivados para o "selecionar toda a região").
+          const _sc = COUNTRIES.find(c => c.id === selectedCountry)?.center;
+          const regionDefs = isBR
+            ? (BASINS_BY_COUNTRY[selectedCountry] || []).map(b => ({
+                ...b,
+                center: _sc ? [_sc.latitude, _sc.longitude] : undefined,
+                zoom: 8,
+                watercourseIds: (byRegion[b.id] || []).map(w => w.id),
+              }))
+            : REGIONS;
+
+          // Distância mínima por região para ordenar por proximidade
           const regionDist = {};
-          for (const r of REGIONS) {
+          for (const r of regionDefs) {
             const items = byRegion[r.id] || [];
             regionDist[r.id] = items.length > 0 ? items[0].distKm : 9999;
           }
-          const sortedRegions = [...REGIONS].sort((a, b) => regionDist[a.id] - regionDist[b.id]);
+          const sortedRegions = [...regionDefs].sort((a, b) => regionDist[a.id] - regionDist[b.id]);
 
           const selectedText = selectedWatercourseIds.length === 0
             ? t('selectLocation')
