@@ -6307,6 +6307,7 @@ function App() {
               <React.Fragment key={area.id}>
                 <Polygon
                   positions={area.polygon}
+                  interactive={false}
                   pathOptions={{
                     color: catCfg.color,
                     fillColor: catCfg.color,
@@ -6315,9 +6316,7 @@ function App() {
                     opacity: 0.75,
                     dashArray: catCfg.dash,
                   }}
-                >
-                  {popup}
-                </Polygon>
+                />
                 <CircleMarker
                   center={area.center}
                   radius={6}
@@ -6377,10 +6376,9 @@ function App() {
                   <Polygon
                     key={`${area.id}-r${i}`}
                     positions={ring}
+                    interactive={false}
                     pathOptions={{ color: UC_CAT.color, fillColor: UC_CAT.color, fillOpacity: 0.08, weight: 2, opacity: 0.75, dashArray: isPI ? null : '8 4' }}
-                  >
-                    {popup}
-                  </Polygon>
+                  />
                 ))}
                 <CircleMarker
                   center={area.center}
@@ -7800,6 +7798,7 @@ function _simplifyBasinPath(path, step) {
 
 function BasinLayer({ tributaries, color, regionId, lineWeight, hitWeight, waterQualityData, species, occurrences }) {
   const [hoveredId, setHoveredId] = useState(null);
+  const [clicked, setClicked] = useState(null); // { id, latlng } — popup aberto por CLIQUE no ponto clicado
   // Canvas próprio desta bacia, reutilizado entre montagens (pool por regionId em
   // getBasinRenderer): distribui a carga e evita acúmulo de <canvas> ao trocar de país.
   const renderer = getBasinRenderer(regionId || 'default');
@@ -7812,6 +7811,36 @@ function BasinLayer({ tributaries, color, regionId, lineWeight, hitWeight, water
 
   return <>
     {tributaries.map(t => {
+      const isActive = hoveredId === t.id || clicked?.id === t.id;
+      const w = t.waterway === 'river' ? lineWeight : lineWeight * 0.7;
+
+      return t.paths.map((path, pi) => (
+        <React.Fragment key={`bc-${t.id}-${pi}`}>
+          {isActive && (
+            <Polyline positions={path}
+              pathOptions={{ color, weight: w * 4, opacity: 0.25, lineCap: 'round', lineJoin: 'round' }}
+              renderer={renderer}
+            />
+          )}
+          <Polyline positions={path}
+            pathOptions={{ color: isActive ? '#fff' : color, weight: isActive ? w * 1.5 : w,
+              opacity: isActive ? 1 : 0.7, lineCap: 'round', lineJoin: 'round' }}
+            renderer={renderer}
+            eventHandlers={{
+              mouseover: () => setHoveredId(t.id),
+              mouseout: () => setHoveredId(null),
+              click: (e) => setClicked({ id: t.id, latlng: e.latlng }),
+            }}
+          />
+        </React.Fragment>
+      ));
+    })}
+
+    {/* Popup único, aberto no ponto clicado (evita o problema do bindPopup que só
+        abre no 2º clique e o flicker do hover). */}
+    {clicked && (() => {
+      const t = tributaries.find(x => x.id === clicked.id);
+      if (!t) return null;
       const wcType = classifyWatercourse(t.name || '');
       const allowedIds = SPECIES_BY_WATERCOURSE[wcType] || [];
       const speciesList = allowedIds.map(id => species.find(s => s.id === id)).filter(Boolean)
@@ -7820,75 +7849,55 @@ function BasinLayer({ tributaries, color, regionId, lineWeight, hitWeight, water
       const qualityData = waterQualityData?.[t.id];
       const qualityScore = qualityData?.quality_score || estimateWaterQualityHeuristic(t.name, wcType, 0, 0);
       const courseOccurrences = (occurrences || []).filter(o => o.tributaryId === t.id || o.tributaryName === t.name).length;
-      const isHovered = hoveredId === t.id;
-      const w = t.waterway === 'river' ? lineWeight : lineWeight * 0.7;
-
-      return t.paths.map((path, pi) => (
-        <React.Fragment key={`bc-${t.id}-${pi}`}>
-          {isHovered && (
-            <Polyline positions={path}
-              pathOptions={{ color, weight: w * 4, opacity: 0.25, lineCap: 'round', lineJoin: 'round' }}
-              renderer={renderer}
-            />
-          )}
-          <Polyline positions={path}
-            pathOptions={{ color: isHovered ? '#fff' : color, weight: isHovered ? w * 1.5 : w,
-              opacity: isHovered ? 1 : 0.7, lineCap: 'round', lineJoin: 'round' }}
-            renderer={renderer}
-            eventHandlers={{ mouseover: () => setHoveredId(t.id), mouseout: () => setHoveredId(null) }}
-          >
-            {pi === 0 && isHovered && (
-              <Popup>
-                <div style={{ minWidth: 210, maxWidth: 270, background: '#0f172a', padding: 12, borderRadius: 8, color: '#e5f6ff' }}>
-                  <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:8 }}>
-                    <span style={{ fontSize:'1.2rem' }}>{getTypeIcon(wcType)}</span>
-                    <div>
-                      <strong style={{ fontSize:'0.9rem', color:'#e5f6ff', display:'block' }}>{t.name}</strong>
-                      <div style={{ fontSize:'0.72rem', color:'#94a3b8' }}>{getTypeLabel(wcType)}</div>
-                    </div>
+      return (
+        <Popup position={clicked.latlng} eventHandlers={{ remove: () => setClicked(null) }}>
+          <div style={{ minWidth: 210, maxWidth: 270, background: '#0f172a', padding: 12, borderRadius: 8, color: '#e5f6ff' }}>
+            <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:8 }}>
+              <span style={{ fontSize:'1.2rem' }}>{getTypeIcon(wcType)}</span>
+              <div>
+                <strong style={{ fontSize:'0.9rem', color:'#e5f6ff', display:'block' }}>{t.name}</strong>
+                <div style={{ fontSize:'0.72rem', color:'#94a3b8' }}>{getTypeLabel(wcType)}</div>
+              </div>
+            </div>
+            <div style={{ display:'flex', alignItems:'center', gap:6, marginBottom:10, padding:'5px 8px',
+              background: qualityScore < 50 ? 'rgba(239,68,68,0.15)' : qualityScore < 65 ? 'rgba(249,115,22,0.15)' : 'rgba(34,197,94,0.15)',
+              borderRadius:6 }}>
+              <Droplets size={13} color={qualityScore < 50 ? '#ef4444' : qualityScore < 65 ? '#f97316' : '#22c55e'} />
+              <span style={{ fontSize:'0.78rem', color: qualityScore < 50 ? '#ef4444' : qualityScore < 65 ? '#f97316' : '#22c55e' }}>
+                {_blT('popupQuality')}: <strong>{qualityScore}%</strong>{!qualityData && ` (${_blT('popupEst')})`}
+              </span>
+            </div>
+            {speciesList.length > 0 && (
+              <div style={{ marginBottom:8 }}>
+                <div style={{ fontSize:'0.7rem', color:'#64748b', marginBottom:4, textTransform:'uppercase' }}>{_blT('popupFish')} ({speciesList.length})</div>
+                {speciesList.slice(0,4).map(s => (
+                  <div key={s.id} style={{ display:'flex', alignItems:'center', gap:5, padding:'3px 6px', fontSize:'0.78rem' }}>
+                    <span style={{ width:7, height:7, borderRadius:'50%', background: s.color || color, flexShrink:0 }} />
+                    <span style={{ flex:1, color:'#e5f6ff' }}>{spName(s, _blLang)}</span>
+                    <span style={{ color:'#94a3b8' }}>{formatSize(s.maxSizeKg)}</span>
+                    {BIG_FISH_SPECIES.has(s.id) && <span>🐟</span>}
                   </div>
-                  <div style={{ display:'flex', alignItems:'center', gap:6, marginBottom:10, padding:'5px 8px',
-                    background: qualityScore < 50 ? 'rgba(239,68,68,0.15)' : qualityScore < 65 ? 'rgba(249,115,22,0.15)' : 'rgba(34,197,94,0.15)',
-                    borderRadius:6 }}>
-                    <Droplets size={13} color={qualityScore < 50 ? '#ef4444' : qualityScore < 65 ? '#f97316' : '#22c55e'} />
-                    <span style={{ fontSize:'0.78rem', color: qualityScore < 50 ? '#ef4444' : qualityScore < 65 ? '#f97316' : '#22c55e' }}>
-                      {_blT('popupQuality')}: <strong>{qualityScore}%</strong>{!qualityData && ` (${_blT('popupEst')})`}
-                    </span>
-                  </div>
-                  {speciesList.length > 0 && (
-                    <div style={{ marginBottom:8 }}>
-                      <div style={{ fontSize:'0.7rem', color:'#64748b', marginBottom:4, textTransform:'uppercase' }}>{_blT('popupFish')} ({speciesList.length})</div>
-                      {speciesList.slice(0,4).map(s => (
-                        <div key={s.id} style={{ display:'flex', alignItems:'center', gap:5, padding:'3px 6px', fontSize:'0.78rem' }}>
-                          <span style={{ width:7, height:7, borderRadius:'50%', background: s.color || color, flexShrink:0 }} />
-                          <span style={{ flex:1, color:'#e5f6ff' }}>{spName(s, _blLang)}</span>
-                          <span style={{ color:'#94a3b8' }}>{formatSize(s.maxSizeKg)}</span>
-                          {BIG_FISH_SPECIES.has(s.id) && <span>🐟</span>}
-                        </div>
-                      ))}
-                      {speciesList.length > 4 && <div style={{ fontSize:'0.72rem', color:'#64748b', padding:'2px 6px' }}>+{speciesList.length-4} {_blT('popupMoreSpecies')}</div>}
-                    </div>
-                  )}
-                  <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:6, padding:7, background:'rgba(255,255,255,0.04)', borderRadius:5 }}>
-                    <div style={{ textAlign:'center' }}>
-                      <div style={{ fontSize:'1rem', color:'#22c55e' }}>{courseOccurrences}</div>
-                      <div style={{ fontSize:'0.68rem', color:'#64748b' }}>{_blT('navCatches')}</div>
-                    </div>
-                    <div style={{ textAlign:'center' }}>
-                      <div style={{ fontSize:'1rem' }}>{hasBigFish ? '🐟' : '—'}</div>
-                      <div style={{ fontSize:'0.68rem', color:'#64748b' }}>{hasBigFish ? _blT('popupBigFish') : _blT('popupNoRecord')}</div>
-                    </div>
-                  </div>
-                  <div style={{ marginTop:8, padding:'6px 8px', background:'rgba(26,111,212,0.1)', borderRadius:5, fontSize:'0.72rem', color:'#7ab8f5', textAlign:'center' }}>
-                    💡 {_blT('popupSelectHeatmap')}
-                  </div>
-                </div>
-              </Popup>
+                ))}
+                {speciesList.length > 4 && <div style={{ fontSize:'0.72rem', color:'#64748b', padding:'2px 6px' }}>+{speciesList.length-4} {_blT('popupMoreSpecies')}</div>}
+              </div>
             )}
-          </Polyline>
-        </React.Fragment>
-      ));
-    })}
+            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:6, padding:7, background:'rgba(255,255,255,0.04)', borderRadius:5 }}>
+              <div style={{ textAlign:'center' }}>
+                <div style={{ fontSize:'1rem', color:'#22c55e' }}>{courseOccurrences}</div>
+                <div style={{ fontSize:'0.68rem', color:'#64748b' }}>{_blT('navCatches')}</div>
+              </div>
+              <div style={{ textAlign:'center' }}>
+                <div style={{ fontSize:'1rem' }}>{hasBigFish ? '🐟' : '—'}</div>
+                <div style={{ fontSize:'0.68rem', color:'#64748b' }}>{hasBigFish ? _blT('popupBigFish') : _blT('popupNoRecord')}</div>
+              </div>
+            </div>
+            <div style={{ marginTop:8, padding:'6px 8px', background:'rgba(26,111,212,0.1)', borderRadius:5, fontSize:'0.72rem', color:'#7ab8f5', textAlign:'center' }}>
+              💡 {_blT('popupSelectHeatmap')}
+            </div>
+          </div>
+        </Popup>
+      );
+    })()}
   </>;
 }
 
