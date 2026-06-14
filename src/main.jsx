@@ -1715,6 +1715,7 @@ async function loadTribsForCountry(countryId) {
               name: trib.name || id,
               type: trib.type || 'rio',
               paths,
+              order: trib.order ?? null, // porte/ordem do rio (BHO) — usado no modo "vazão"
               // Estados BR: usar o regionId do objeto (já classificado por bacia) em vez do manifest
               regionId: (/^BR-/.test(countryId) && trib.regionId) ? trib.regionId : (regionId || baseRegionId || trib.regionId || 'bacia_desconhecida'),
               center: getCenter(paths)
@@ -4346,6 +4347,7 @@ function App() {
   const [envGrid, setEnvGrid] = useState(null);
   const [envLoading, setEnvLoading] = useState(false);
   const [envMenuOpen, setEnvMenuOpen] = useState(false);
+  const [riverColorBy, setRiverColorBy] = useState('basin'); // 'basin' | 'order' (vazão/porte)
   const [spotModal, setSpotModal] = useState(null); // null | { lat, lng } | { spot } (view mode)
   const [spotForm, setSpotForm] = useState({ name: '', description: '', access_type: 'bank', species_ids: [], species_names: [] });
   const [spotSaving, setSpotSaving] = useState(false);
@@ -6301,14 +6303,15 @@ function App() {
             <div style={{ position: 'relative' }}>
               <button
                 type="button"
-                className={`map-toggle-btn${envLayer ? ' active' : ''}`}
+                className={`map-toggle-btn${(envLayer || riverColorBy === 'order') ? ' active' : ''}`}
                 onClick={() => setEnvMenuOpen((v) => !v)}
                 title="Camadas ambientais (Open-Meteo)"
               >
-                <ThermometerSun size={13} /> {envLayer ? `${ENV_LAYERS[envLayer].emoji} ${ENV_LAYERS[envLayer].label}` : 'Ambiente'}{envLoading ? '…' : ''} <ChevronDown size={11} style={{ opacity: 0.6 }} />
+                <ThermometerSun size={13} /> {envLayer ? `${ENV_LAYERS[envLayer].emoji} ${ENV_LAYERS[envLayer].label}` : (riverColorBy === 'order' ? '🌊 Porte' : 'Ambiente')}{envLoading ? '…' : ''} <ChevronDown size={11} style={{ opacity: 0.6 }} />
               </button>
               {envMenuOpen && (
-                <div style={{ position: 'absolute', top: 'calc(100% + 4px)', left: 0, zIndex: 1500, background: 'var(--bg-surface)', border: '1px solid var(--border-faint2)', borderRadius: 8, overflow: 'hidden', boxShadow: 'var(--shadow-modal)', minWidth: 150 }}>
+                <div style={{ position: 'absolute', top: 'calc(100% + 4px)', left: 0, zIndex: 1500, background: 'var(--bg-surface)', border: '1px solid var(--border-faint2)', borderRadius: 8, overflow: 'hidden', boxShadow: 'var(--shadow-modal)', minWidth: 160 }}>
+                  <div style={{ padding: '5px 11px 3px', fontSize: '0.62rem', color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: 0.4 }}>Campo ambiental</div>
                   {[['', '⛔ Desligar'], ['watertemp', '🌡️ Temp. água'], ['wind', '💨 Vento'], ['pressure', '🎈 Pressão']].map(([k, lbl]) => {
                     const active = (envLayer || '') === k;
                     return (
@@ -6319,6 +6322,12 @@ function App() {
                       </button>
                     );
                   })}
+                  <div style={{ padding: '5px 11px 3px', fontSize: '0.62rem', color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: 0.4, borderTop: '1px solid var(--border-faint2)' }}>Rede de rios</div>
+                  <button type="button"
+                    onClick={() => { setRiverColorBy(v => v === 'order' ? 'basin' : 'order'); setEnvMenuOpen(false); }}
+                    style={{ width: '100%', textAlign: 'left', padding: '8px 11px', background: riverColorBy === 'order' ? 'rgba(59,130,246,0.16)' : 'transparent', border: 'none', color: riverColorBy === 'order' ? '#60a5fa' : 'var(--text-primary)', cursor: 'pointer', fontSize: '0.8rem', fontWeight: riverColorBy === 'order' ? 700 : 400 }}>
+                    🌊 Porte/vazão {riverColorBy === 'order' ? '✓' : ''}
+                  </button>
                 </div>
               )}
             </div>
@@ -6544,6 +6553,7 @@ function App() {
             extraRiverGeometries={extraRiverGeometries}
             activeBasins={activeBasins}
             selectedCountry={selectedCountry}
+            colorBy={riverColorBy}
           />}
 
           {/* Rios e lagoas extras (overlays herói legados) — desativados: a rede oficial
@@ -6901,6 +6911,16 @@ function App() {
                 <span style={{ fontSize:'0.62rem', color:'#94a3b8' }}>{ENV_LAYERS[envLayer].domain[1]} {ENV_LAYERS[envLayer].unit}</span>
               </div>
               {envLayer === 'wind' && <div style={{ fontSize:'0.6rem', color:'#64748b', marginTop:3 }}>setas = direção do vento</div>}
+            </div>
+          )}
+          {riverColorBy === 'order' && (
+            <div style={{ position:'absolute', left:10, bottom: envLayer ? 84 : 26, zIndex:1000, background:'rgba(15,23,42,0.86)', border:'1px solid rgba(255,255,255,0.12)', borderRadius:8, padding:'7px 10px', pointerEvents:'none' }}>
+              <div style={{ fontSize:'0.7rem', color:'#cbd5e1', marginBottom:5, fontWeight:600 }}>🌊 Porte do rio (vazão relativa)</div>
+              <div style={{ display:'flex', alignItems:'center', gap:6 }}>
+                <span style={{ fontSize:'0.62rem', color:'#94a3b8' }}>cabeceira</span>
+                <div style={{ width:120, height:10, borderRadius:5, background:'linear-gradient(90deg, rgb(125,211,252), rgb(56,189,248), rgb(14,165,233), rgb(37,99,235), rgb(30,58,138))' }} />
+                <span style={{ fontSize:'0.62rem', color:'#94a3b8' }}>tronco</span>
+              </div>
             </div>
           )}
           <MapLegend
@@ -8077,6 +8097,10 @@ function _envColor(stops, v) {
   }
   return stops[stops.length-1][1];
 }
+// Cor por porte do rio (ordem 1–10): cabeceiras claras/finas → troncos azul-escuro/grossos.
+const _ORDER_STOPS = [[1,[125,211,252]],[3,[56,189,248]],[5,[14,165,233]],[7,[37,99,235]],[10,[30,58,138]]];
+function _orderColor(o) { const [r,g,b] = _envColor(_ORDER_STOPS, o); return `rgb(${r},${g},${b})`; }
+
 // CSS linear-gradient para a legenda (a partir das paradas e do domínio)
 function _envGradientCss(cfg) {
   const [d0,d1] = cfg.domain;
@@ -8187,7 +8211,7 @@ function EnvCanvasLayer({ grid, opacity = 0.5 }) {
 }
 
 // Componente para mostrar todos os cursos d'água quando nenhum está selecionado
-function AllWatercourses({ tributaryLines, waterQualityData, species, occurrences, selectedWatercourseIds, santaLuciaGeometry, extraRivers = [], extraRiverGeometries = {}, activeBasins = new Set(), selectedCountry = 'UY' }) {
+function AllWatercourses({ tributaryLines, waterQualityData, species, occurrences, selectedWatercourseIds, santaLuciaGeometry, extraRivers = [], extraRiverGeometries = {}, activeBasins = new Set(), selectedCountry = 'UY', colorBy = 'basin' }) {
   const map = useMap();
   const [zoom, setZoom] = useState(map?.getZoom() || 11);
   const [hoveredId, setHoveredId] = useState(null);
@@ -8289,15 +8313,19 @@ function AllWatercourses({ tributaryLines, waterQualityData, species, occurrence
 
   // Agrupar por bacia: todas as paths de cada bacia viram UMA multi-polyline (positions).
   // Refs estáveis entre cliques (memo do BasinLayer).
+  // Agrupa por bacia (cor da bacia) ou por porte/ordem do rio (modo "vazão"): cada
+  // grupo vira uma multi-polyline. Em modo ordem, a chave é `ord-<n>` (1–10).
   const basinGroups = useMemo(() => {
     const groups = {};
     for (const t of simplifiedLines) {
-      const rid = t.regionId || 'santa_lucia';
-      const arr = (groups[rid] || (groups[rid] = []));
+      const key = colorBy === 'order'
+        ? `ord-${Math.min(10, Math.max(1, Math.round(t.order || 1)))}`
+        : (t.regionId || 'santa_lucia');
+      const arr = (groups[key] || (groups[key] = []));
       for (const p of t.paths) arr.push(p);
     }
-    return Object.entries(groups).map(([rid, positions]) => ({ rid, positions }));
-  }, [simplifiedLines]);
+    return Object.entries(groups).map(([key, positions]) => ({ key, positions }));
+  }, [simplifiedLines, colorBy]);
 
   // Se não há dados de tributários e geometria do Santa Lucía, não renderiza nada
   if ((!tributaryLines || tributaryLines.length === 0) && (!santaLuciaGeometry || santaLuciaGeometry.length === 0)) return null;
@@ -8405,16 +8433,22 @@ function AllWatercourses({ tributaryLines, waterQualityData, species, occurrence
         </>
       )}
 
-      {/* Uma multi-polyline por bacia (linhas não-interativas; clique via handler abaixo) */}
-      {basinGroups.map(g => (
-        <BasinLayer
-          key={`${g.rid}-${selectedCountry}`}
-          regionId={g.rid}
-          positions={g.positions}
-          color={REGION_COLORS[g.rid] || '#3b82f6'}
-          lineWeight={lineWeight}
-        />
-      ))}
+      {/* Uma multi-polyline por grupo (bacia ou porte do rio); não-interativas */}
+      {basinGroups.map(g => {
+        const isOrder = colorBy === 'order' && g.key.startsWith('ord-');
+        const ord = isOrder ? +g.key.slice(4) : 0;
+        const color = isOrder ? _orderColor(ord) : (REGION_COLORS[g.key] || '#3b82f6');
+        const w = isOrder ? Math.max(0.6, Math.min(lineWeight * 2.2, 0.5 + ord * 0.55)) : lineWeight;
+        return (
+          <BasinLayer
+            key={`${g.key}-${selectedCountry}`}
+            regionId={g.key}
+            positions={g.positions}
+            color={color}
+            lineWeight={w}
+          />
+        );
+      })}
 
       {/* Clique no mapa → acha o rio mais próximo (entre todas as bacias) e abre o popup.
           Resolve o empilhamento de canvases (clique real só atinge o canvas do topo). */}
