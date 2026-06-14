@@ -58,7 +58,7 @@ export default function IoTSensors({ onSensorData }) {
     fetchFromSupabase();
 
     const channel = supabase
-      .channel('sensors-realtime')
+      .channel(`sensors-realtime-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: SENSOR_TABLE }, (payload) => {
         if (payload.new) {
           setSensors((prev) => {

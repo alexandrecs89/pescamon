@@ -31,7 +31,7 @@ export default function RiverChat({ segmentName, authSession }) {
       });
 
     const channel = supabase
-      .channel(`chat-${segmentName}`)
+      .channel(`chat-${segmentName}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`)
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: CHAT_TABLE, filter: `segment=eq.${segmentName}` }, (payload) => {
         if (!payload.new) return;
         setMessages((prev) => {

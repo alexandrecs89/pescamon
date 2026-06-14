@@ -986,7 +986,7 @@ export default function SocialFeed({ authSession, speciesList = [], onRequestLog
   useEffect(() => {
     if (!currentUserId) return;
     const channel = supabase
-      .channel('notif-' + currentUserId)
+      .channel(`notif-${currentUserId}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`)
       .on('postgres_changes', {
         event: 'INSERT',
         schema: 'public',

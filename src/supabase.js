@@ -289,8 +289,12 @@ function rowToOccurrence(row) {
 export function subscribeToOccurrences(onInsert, onDelete) {
   const deviceId = getDeviceId();
 
+  // Nome de canal ÚNICO por inscrição. Com nome fixo, o StrictMode/HMR (que monta o
+  // efeito duas vezes) reaproveitava o canal já inscrito e chamava `.on()` depois do
+  // `.subscribe()` → "cannot add postgres_changes callbacks after subscribe()". Um
+  // nome único garante um canal novo a cada chamada; o cleanup remove o seu.
   const channel = supabase
-    .channel('occurrences-realtime')
+    .channel(`occurrences-realtime-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`)
     .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'occurrences' }, (payload) => {
       if (payload.new?.device_id === deviceId) return;
       onInsert(rowToOccurrence(payload.new));
@@ -302,7 +306,7 @@ export function subscribeToOccurrences(onInsert, onDelete) {
     })
     .subscribe();
 
-  return () => supabase.removeChannel(channel);
+  return () => { supabase.removeChannel(channel); };
 }
 
 export async function savePlannedTrip(plan) {
