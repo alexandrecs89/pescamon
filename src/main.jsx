@@ -4347,6 +4347,7 @@ function App() {
   const [envGrid, setEnvGrid] = useState(null);
   const [envLoading, setEnvLoading] = useState(false);
   const [envMenuOpen, setEnvMenuOpen] = useState(false);
+  const [envTime, setEnvTime] = useState(0); // índice da hora no slider de tempo
   const [riverColorBy, setRiverColorBy] = useState('basin'); // 'basin' | 'order' (vazão/porte)
   const [spotModal, setSpotModal] = useState(null); // null | { lat, lng } | { spot } (view mode)
   const [spotForm, setSpotForm] = useState({ name: '', description: '', access_type: 'bank', species_ids: [], species_names: [] });
@@ -4366,7 +4367,7 @@ function App() {
     let cancelled = false;
     setEnvLoading(true);
     fetchEnvGrid(selectedCountry, envLayer)
-      .then(g => { if (!cancelled) setEnvGrid(g); })
+      .then(g => { if (!cancelled) { setEnvGrid(g); if (g) setEnvTime(g.nowIdx ?? 0); } })
       .catch(() => { if (!cancelled) setEnvGrid(null); })
       .finally(() => { if (!cancelled) setEnvLoading(false); });
     return () => { cancelled = true; };
@@ -6343,7 +6344,7 @@ function App() {
           <SpotClickHandler onRightClick={(lat, lng) => { setSpotModal({ lat, lng }); setSpotForm({ name:'', description:'', access_type:'bank', species_ids:[], species_names:[] }); }} />
 
           {/* Camada ambiental — sob os rios, não-interativa */}
-          {envLayer && envGrid && <EnvCanvasLayer grid={envGrid} />}
+          {envLayer && envGrid && <EnvCanvasLayer grid={envGrid} timeIndex={envTime} />}
 
           {/* IoT Sensors Layer */}
           {iotSensors.map(sensor => (
@@ -6903,14 +6904,25 @@ function App() {
           )}
         </MapContainer>
           {envLayer && ENV_LAYERS[envLayer] && (
-            <div style={{ position:'absolute', left:10, bottom:26, zIndex:1000, background:'rgba(15,23,42,0.86)', border:'1px solid rgba(255,255,255,0.12)', borderRadius:8, padding:'7px 10px', pointerEvents:'none' }}>
+            <div style={{ position:'absolute', left:10, bottom:26, zIndex:1000, background:'rgba(15,23,42,0.9)', border:'1px solid rgba(255,255,255,0.12)', borderRadius:8, padding:'7px 10px', pointerEvents:'auto', width: 168 }}>
               <div style={{ fontSize:'0.7rem', color:'#cbd5e1', marginBottom:5, fontWeight:600 }}>{ENV_LAYERS[envLayer].emoji} {ENV_LAYERS[envLayer].label}{envLoading ? ' · carregando…' : ''}</div>
               <div style={{ display:'flex', alignItems:'center', gap:6 }}>
                 <span style={{ fontSize:'0.62rem', color:'#94a3b8' }}>{ENV_LAYERS[envLayer].domain[0]}</span>
-                <div style={{ width:120, height:10, borderRadius:5, background: _envGradientCss(ENV_LAYERS[envLayer]) }} />
+                <div style={{ flex:1, height:10, borderRadius:5, background: _envGradientCss(ENV_LAYERS[envLayer]) }} />
                 <span style={{ fontSize:'0.62rem', color:'#94a3b8' }}>{ENV_LAYERS[envLayer].domain[1]} {ENV_LAYERS[envLayer].unit}</span>
               </div>
               {envLayer === 'wind' && <div style={{ fontSize:'0.6rem', color:'#64748b', marginTop:3 }}>setas = direção do vento</div>}
+              {envGrid?.times?.length > 1 && (
+                <div style={{ marginTop:7 }}>
+                  <input type="range" min={0} max={envGrid.times.length - 1}
+                    value={Math.min(envTime, envGrid.times.length - 1)}
+                    onChange={e => setEnvTime(+e.target.value)}
+                    style={{ width:'100%', accentColor:'#38bdf8', cursor:'pointer', margin:0 }} />
+                  <div style={{ fontSize:'0.66rem', color:'#7dd3fc', textAlign:'center', marginTop:1, fontWeight:600 }}>
+                    🕑 {_fmtEnvTime(envGrid.times[Math.min(envTime, envGrid.times.length - 1)], Math.min(envTime, envGrid.times.length - 1) === envGrid.nowIdx)}
+                  </div>
+                </div>
+              )}
             </div>
           )}
           {riverColorBy === 'order' && (
@@ -8106,9 +8118,18 @@ function _envGradientCss(cfg) {
   const [d0,d1] = cfg.domain;
   return 'linear-gradient(90deg,' + cfg.stops.map(([v,[r,g,b]]) => `rgb(${r},${g},${b}) ${Math.round(100*(v-d0)/(d1-d0))}%`).join(',') + ')';
 }
+// Rótulo do slider de tempo (ex.: "Sáb 15h" / "Sáb 15h · agora")
+function _fmtEnvTime(iso, isNow) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  const dias = ['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'];
+  const lbl = `${dias[d.getDay()]} ${String(d.getHours()).padStart(2,'0')}h`;
+  return isNow ? `${lbl} · agora` : lbl;
+}
 
-// Busca uma grade de valores da camada `kind` sobre o bbox do país, recortada à
-// fronteira oficial. Uma única chamada Open-Meteo (multi-coordenada).
+// Busca uma grade HORÁRIA (48h) da camada `kind` sobre o bbox do país, recortada à
+// fronteira oficial. Uma única chamada Open-Meteo (multi-coordenada). Cada ponto traz
+// uma série temporal (values[] e, no vento, dirs[]) para o slider de tempo.
 async function fetchEnvGrid(country, kind) {
   const cfg = ENV_LAYERS[kind];
   const c = COUNTRIES.find(x => x.id === country);
@@ -8127,30 +8148,42 @@ async function fetchEnvGrid(country, kind) {
       pts.push([+la.toFixed(3), +lo.toFixed(3)]);
     }
   if (!pts.length) return null;
-  const url = `https://api.open-meteo.com/v1/forecast?latitude=${pts.map(p=>p[0]).join(',')}&longitude=${pts.map(p=>p[1]).join(',')}&current=${cfg.om}&timezone=auto`;
+  const vars = cfg.om.split(',');
+  const url = `https://api.open-meteo.com/v1/forecast?latitude=${pts.map(p=>p[0]).join(',')}&longitude=${pts.map(p=>p[1]).join(',')}&hourly=${cfg.om}&forecast_days=2&timezone=auto`;
   const res = await fetch(url);
   if (!res.ok) return null;
   const data = await res.json();
   const arr = Array.isArray(data) ? data : [data];
+  const times = (arr[0]?.hourly?.time || []);
+  if (!times.length) return null;
   const out = [];
   for (let i = 0; i < pts.length; i++) {
-    const cur = arr[i]?.current;
-    if (!cur) continue;
-    const v = cfg.value(cur);
-    if (v == null || Number.isNaN(v)) continue;
-    out.push({ lat: pts[i][0], lng: pts[i][1], value: v, dir: cfg.dir ? cfg.dir(cur) : null });
+    const h = arr[i]?.hourly;
+    if (!h) continue;
+    const values = [], dirs = [];
+    for (let t = 0; t < times.length; t++) {
+      const obj = {}; for (const v of vars) obj[v] = h[v]?.[t];
+      values.push(cfg.value(obj));
+      if (cfg.dir) dirs.push(cfg.dir(obj));
+    }
+    out.push({ lat: pts[i][0], lng: pts[i][1], values, dirs: cfg.dir ? dirs : null });
   }
-  return out.length ? { points: out, step, kind } : null;
+  // índice "agora" = hora cuja string >= agora (Open-Meteo dá horário local)
+  const nowIso = new Date().toISOString().slice(0, 13); // YYYY-MM-DDTHH
+  let nowIdx = times.findIndex(t => t.slice(0, 13) >= nowIso);
+  if (nowIdx < 0) nowIdx = 0;
+  return out.length ? { points: out, times, nowIdx, step, kind } : null;
 }
 
 // Overlay de canvas que desenha um campo contínuo (gradientes radiais por ponto da
 // grade) + setas (vento). Não-interativo — os rios seguem clicáveis por baixo.
-function EnvCanvasLayer({ grid, opacity = 0.5 }) {
+function EnvCanvasLayer({ grid, timeIndex = 0, opacity = 0.5 }) {
   const map = useMap();
   useEffect(() => {
     if (!map || !grid?.points?.length || !window.L) return;
     const cfg = ENV_LAYERS[grid.kind];
     if (!cfg) return;
+    const ti = Math.max(0, Math.min(timeIndex, (grid.times?.length || 1) - 1));
     const L = window.L;
     const canvas = L.DomUtil.create('canvas', 'leaflet-zoom-animated');
     canvas.style.pointerEvents = 'none';
@@ -8168,9 +8201,11 @@ function EnvCanvasLayer({ grid, opacity = 0.5 }) {
       // 1) campo de cor
       ctx.globalAlpha = opacity;
       for (const p of grid.points) {
+        const val = p.values[ti];
+        if (val == null || Number.isNaN(val)) continue;
         const cp = map.latLngToContainerPoint([p.lat, p.lng]);
         if (cp.x < -R || cp.x > size.x + R || cp.y < -R || cp.y > size.y + R) continue;
-        const [r, g, b] = _envColor(cfg.stops, p.value);
+        const [r, g, b] = _envColor(cfg.stops, val);
         const grd = ctx.createRadialGradient(cp.x, cp.y, 0, cp.x, cp.y, R);
         grd.addColorStop(0, `rgba(${r},${g},${b},1)`);
         grd.addColorStop(1, `rgba(${r},${g},${b},0)`);
@@ -8185,10 +8220,11 @@ function EnvCanvasLayer({ grid, opacity = 0.5 }) {
         ctx.fillStyle = 'rgba(255,255,255,0.9)';
         ctx.lineWidth = 1.4;
         for (const p of grid.points) {
-          if (p.dir == null) continue;
+          const dir = p.dirs?.[ti];
+          if (dir == null) continue;
           const cp = map.latLngToContainerPoint([p.lat, p.lng]);
           if (cp.x < 0 || cp.x > size.x || cp.y < 0 || cp.y > size.y) continue;
-          const th = (p.dir + 180) * Math.PI / 180;
+          const th = (dir + 180) * Math.PI / 180;
           const dx = Math.sin(th), dy = -Math.cos(th);
           const x0 = cp.x - dx * len / 2, y0 = cp.y - dy * len / 2;
           const x1 = cp.x + dx * len / 2, y1 = cp.y + dy * len / 2;
@@ -8206,7 +8242,7 @@ function EnvCanvasLayer({ grid, opacity = 0.5 }) {
     draw();
     map.on('moveend zoomend viewreset resize', draw);
     return () => { map.off('moveend zoomend viewreset resize', draw); L.DomUtil.remove(canvas); };
-  }, [map, grid, opacity]);
+  }, [map, grid, timeIndex, opacity]);
   return null;
 }
 
