@@ -365,8 +365,10 @@ No Netlify: Site settings → Environment variables → adicionar as mesmas duas
 #### 🥇 Alta prioridade — diferencial visual (estilo Windy, sobre o nosso heatmap)
 
 - [x] **Camadas ambientais no mapa** (estilo Windy): seletor "Ambiente" com **Temp. água · Vento · Pressão** — campo contínuo por gradiente radial (`EnvCanvasLayer`, config-driven em `ENV_LAYERS`), legenda kind-aware; o vento ainda desenha **setas de direção**. Grade Open-Meteo (1 chamada multi-coordenada) recortada à fronteira; não-interativas (rios seguem clicáveis por cima).
-- [ ] **Vazão como coloração da rede**: a vazão é propriedade do rio (não um campo sobre o terreno), então entra como camada que colore os próprios trechos por descarga (GloFAS), não no `EnvCanvasLayer`.
-- [ ] **Slider de tempo**: varrer o forecast recolorindo as camadas ambientais e o heatmap de espécie.
+- [x] **Vazão/porte como coloração da rede**: modo `riverColorBy='order'` colore os trechos por ordem do rio (BHO) — cabeceiras claras/finas → troncos azul-escuro/grossos. (Vazão dinâmica por trecho via GloFAS continua futura.)
+- [x] **Slider de tempo (camadas ambientais)**: `fetchEnvGrid` busca a série horária 48h; slider na legenda varre o forecast recolorindo o campo (e as setas de vento). _Falta estender ao heatmap de espécie._
+- [x] **Timeline de "bite time"** (`BiteTimeTimeline`): atividade horária 48h por local/espécie (crepúsculo + lua + pressão + vento + nuvens), com melhores janelas e marcador "agora".
+- [ ] **Estender o slider de tempo ao heatmap de espécie** (re-score por hora) e **vazão dinâmica (GloFAS)** por trecho.
 - [ ] **Timeline de atividade ("bite time")** por local/espécie: score temporal (tipo 4×6h do Windy) com solunar + pressão (`pressureSensitivity`) + clima.
 - [ ] **Polir o heatmap de espécie**: gradiente contínuo + legenda + slider de tempo (varrer o forecast recolorindo o mapa).
 

@@ -6098,6 +6098,18 @@ function App() {
         </div>
 
         <div className="control-block">
+          {(() => {
+            const wc = selectedWatercourses[0];
+            const ctr = COUNTRIES.find(c => c.id === selectedCountry)?.center;
+            const loc = wc?.center || (userLocation ? [userLocation.lat, userLocation.lon] : (ctr ? [ctr.latitude, ctr.longitude] : null));
+            if (!loc) return null;
+            const label = wc?.name || (userLocation ? 'Sua localização' : COUNTRIES.find(c => c.id === selectedCountry)?.name);
+            const ps = selectedSpecies?.[0]?.preferences?.pressureSensitivity ?? 0.5;
+            return <BiteTimeTimeline lat={loc[0]} lon={loc[1]} locLabel={label} pressureSensitivity={ps} />;
+          })()}
+        </div>
+
+        <div className="control-block">
           <PredictiveAlerts
             occurrences={occurrences}
             speciesList={species}
@@ -8125,6 +8137,122 @@ function _fmtEnvTime(iso, isNow) {
   const dias = ['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'];
   const lbl = `${dias[d.getDay()]} ${String(d.getHours()).padStart(2,'0')}h`;
   return isNow ? `${lbl} · agora` : lbl;
+}
+
+// ── Timeline de "bite time" (atividade do peixe por hora, estilo Windy) ───────
+function _moonPhase01(date = new Date()) {
+  const y = date.getFullYear(), m = date.getMonth() + 1, day = date.getDate();
+  const c = m < 3 ? y - 1 : y, e = m < 3 ? m + 12 : m;
+  let jd = Math.floor(365.25 * (c + 4716)) + Math.floor(30.6001 * (e + 1)) + day - 1524.5;
+  jd += 2 - Math.floor(c / 100) + Math.floor(c / 400);
+  let days = (jd - 2451550.1) % 29.530588853;
+  if (days < 0) days += 29.530588853;
+  return days / 29.530588853; // 0=nova, 0.5=cheia
+}
+function _moonFactor(phase) { return 0.5 + 0.5 * Math.abs(Math.cos(phase * 2 * Math.PI)); }
+function _moonName(phase) {
+  const t = [[0.0625,'🌑','Lua Nova'],[0.1875,'🌒','Crescente'],[0.3125,'🌓','Quarto crescente'],[0.4375,'🌔','Gibosa crescente'],[0.5625,'🌕','Lua Cheia'],[0.6875,'🌖','Gibosa minguante'],[0.8125,'🌗','Quarto minguante'],[0.9375,'🌘','Minguante']];
+  for (const [lim, icon, name] of t) if (phase < lim) return { icon, name };
+  return { icon: '🌑', name: 'Lua Nova' };
+}
+function _gauss(x, sigma) { return Math.exp(-(x * x) / (2 * sigma * sigma)); }
+function _clampn(v, a, b) { return v < a ? a : v > b ? b : v; }
+function _biteColor(s) { return s >= 72 ? '#22c55e' : s >= 55 ? '#84cc16' : s >= 40 ? '#eab308' : s >= 28 ? '#f59e0b' : '#64748b'; }
+
+// Calcula a atividade horária (0–100) a partir do forecast Open-Meteo do ponto.
+function computeBiteHours(d, pressureSensitivity = 0.5) {
+  const h = d?.hourly; if (!h?.time) return null;
+  const sunrises = (d.daily?.sunrise || []).map(s => new Date(s).getTime());
+  const sunsets = (d.daily?.sunset || []).map(s => new Date(s).getTime());
+  const mf = _moonFactor(_moonPhase01(new Date()));
+  const psW = 0.18 + 0.16 * pressureSensitivity;
+  const den = 0.40 + psW + 0.18 + 0.10 + 0.10;
+  const hours = [];
+  for (let i = 0; i < h.time.length; i++) {
+    const tms = new Date(h.time[i]).getTime();
+    const isDay = h.is_day?.[i] === 1;
+    const toSunrise = sunrises.length ? Math.min(...sunrises.map(s => Math.abs(tms - s))) / 60000 : 999;
+    const toSunset = sunsets.length ? Math.min(...sunsets.map(s => Math.abs(tms - s))) / 60000 : 999;
+    const dawnDusk = Math.max(_gauss(toSunrise, 70), _gauss(toSunset, 70));
+    const tod = Math.max(isDay ? 0.42 : 0.55, dawnDusk);
+    const pr = h.surface_pressure?.[i] ?? 1013;
+    const pr3 = h.surface_pressure?.[Math.max(0, i - 3)] ?? pr;
+    let pf = (pr >= 1008 && pr <= 1022) ? 0.82 : (pr < 1000 || pr > 1026) ? 0.35 : 0.6;
+    if (pr - pr3 < -1.2) pf = Math.min(1, pf + 0.2); // pressão caindo = frente
+    const w = h.wind_speed_10m?.[i] ?? 10;
+    const wf = w < 6 ? 0.6 : w <= 22 ? 0.85 : w <= 35 ? 0.5 : 0.3;
+    const cloud = h.cloud_cover?.[i] ?? 50;
+    const cf = isDay ? 0.6 + (cloud / 100) * 0.3 : 0.8;
+    const score = Math.round(_clampn(100 * (0.40 * tod + psW * pf + 0.18 * wf + 0.10 * cf + 0.10 * mf) / den, 5, 100));
+    hours.push({ tms, iso: h.time[i], score, isDay });
+  }
+  return hours;
+}
+
+function BiteTimeTimeline({ lat, lon, locLabel, pressureSensitivity = 0.5 }) {
+  const [hours, setHours] = useState(null);
+  const [loading, setLoading] = useState(false);
+  useEffect(() => {
+    if (lat == null || lon == null) { setHours(null); return; }
+    let cancelled = false; setLoading(true);
+    const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat.toFixed(3)}&longitude=${lon.toFixed(3)}&hourly=temperature_2m,surface_pressure,wind_speed_10m,cloud_cover,is_day&daily=sunrise,sunset&forecast_days=2&timezone=auto`;
+    fetch(url).then(r => r.ok ? r.json() : null)
+      .then(d => { if (!cancelled) setHours(computeBiteHours(d, pressureSensitivity)); })
+      .catch(() => { if (!cancelled) setHours(null); })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, [lat, lon, pressureSensitivity]);
+
+  if (lat == null || lon == null) return null;
+  const now = Date.now();
+  const nowIdx = hours ? Math.max(0, hours.findIndex(x => x.tms >= now)) : 0;
+  const phase = _moonPhase01(new Date());
+  const phName = _moonName(phase);
+  // melhores janelas (3 picos não adjacentes, nas próximas 48h)
+  const best = [];
+  if (hours) {
+    const cand = hours.map((x, i) => ({ ...x, i })).filter(x => x.tms >= now).sort((a, b) => b.score - a.score);
+    for (const c of cand) { if (best.length >= 3) break; if (best.every(b => Math.abs(b.i - c.i) >= 4)) best.push(c); }
+    best.sort((a, b) => a.tms - b.tms);
+  }
+  const dias = ['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'];
+  const fmt = (iso) => { const d = new Date(iso); return `${dias[d.getDay()]} ${String(d.getHours()).padStart(2,'0')}h`; };
+
+  return (
+    <div style={{ background:'var(--bg-card2)', border:'1px solid var(--border-faint2)', borderRadius:8, padding:'10px 12px' }}>
+      <div style={{ display:'flex', alignItems:'center', gap:6, marginBottom:8 }}>
+        <span style={{ fontSize:'0.8rem', fontWeight:700, color:'var(--text-primary)' }}>🎣 Melhores horários · 48h</span>
+        <span style={{ marginLeft:'auto', fontSize:'0.68rem', color:'var(--text-dim)' }}>{phName.icon} {phName.name}</span>
+      </div>
+      {locLabel && <div style={{ fontSize:'0.66rem', color:'var(--text-dim)', marginBottom:8, marginTop:-4 }}>📍 {locLabel}</div>}
+      {loading && !hours && <div style={{ fontSize:'0.72rem', color:'var(--text-dim)', padding:'6px 0' }}>Calculando atividade…</div>}
+      {hours && (
+        <>
+          <div style={{ display:'flex', alignItems:'flex-end', gap:1, height:54 }}>
+            {hours.map((x, i) => (
+              <div key={i} title={`${fmt(x.iso)} · ${x.score}%`} style={{
+                flex:1, height:`${Math.max(8, x.score)}%`, background:_biteColor(x.score),
+                opacity: x.isDay ? 1 : 0.6, borderRadius:'2px 2px 0 0',
+                outline: i === nowIdx ? '2px solid #fff' : 'none', outlineOffset: i === nowIdx ? -1 : 0,
+              }} />
+            ))}
+          </div>
+          <div style={{ display:'flex', justifyContent:'space-between', fontSize:'0.58rem', color:'var(--text-dimmer)', marginTop:3 }}>
+            <span>agora</span><span>+12h</span><span>+24h</span><span>+36h</span><span>+48h</span>
+          </div>
+          {best.length > 0 && (
+            <div style={{ marginTop:8, fontSize:'0.7rem', color:'var(--text-secondary)' }}>
+              <span style={{ color:'var(--text-dim)' }}>Melhores janelas: </span>
+              {best.map((b, k) => (
+                <span key={k} style={{ color:_biteColor(b.score), fontWeight:600 }}>{fmt(b.iso)} ({b.score}%){k < best.length - 1 ? ' · ' : ''}</span>
+              ))}
+            </div>
+          )}
+          <div style={{ marginTop:6, fontSize:'0.6rem', color:'var(--text-dimmer)', fontStyle:'italic' }}>Crepúsculo + lua + pressão + vento + nuvens. Estimativa — confirme as condições locais.</div>
+        </>
+      )}
+    </div>
+  );
 }
 
 // Busca uma grade HORÁRIA (48h) da camada `kind` sobre o bbox do país, recortada à
