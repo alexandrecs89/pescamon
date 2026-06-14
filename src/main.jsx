@@ -214,6 +214,12 @@ const BASINS_BY_COUNTRY = {
   ],
 };
 
+// Conjunto com todos os ids de bacia de um país (estado inicial = todas visíveis).
+// Empty(activeBasins) passa a significar "nenhuma bacia" (desmarcar todas = ocultar).
+function allBasinIds(country) {
+  return new Set((BASINS_BY_COUNTRY[country] || BASINS_BY_COUNTRY['UY']).map(b => b.id));
+}
+
 function detectCountryFromCoords(lat, lon) {
   for (const c of COUNTRIES) {
     const { minLat, maxLat, minLon, maxLon } = c.bbox;
@@ -4336,7 +4342,7 @@ function App() {
   const [showSnapAreas, setShowSnapAreas] = useState(true);
   const [protectedAreas, setProtectedAreas] = useState([]); // áreas carregadas por país (RS=UCs ICMBio)
   const [showWatercourses, setShowWatercourses] = useState(true);
-  const [activeBasins, setActiveBasins] = useState(new Set()); // bacias visíveis no mapa
+  const [activeBasins, setActiveBasins] = useState(() => allBasinIds(loadSavedCountry() || 'UY')); // bacias visíveis (inicial = todas)
   
     const [basinDropdownOpen, setBasinDropdownOpen] = useState(false);
   const [showFishingSpots, setShowFishingSpots] = useState(true);
@@ -4379,7 +4385,7 @@ function App() {
     saveCountry(regionId);
     setSelectedWatercourseIds([]);
     setSelectedRegion(null);
-    setActiveBasins(new Set());
+    setActiveBasins(allBasinIds(regionId));
     setPickerOpen(false);
   }, []);
   const [userLocation, setUserLocation] = useState(null);
@@ -8412,8 +8418,8 @@ function AllWatercourses({ tributaryLines, waterQualityData, species, occurrence
     console.log('[DEBUG] simplifiedLines: tributaryLines.length =', tributaryLines.length);
     console.log('[DEBUG] activeBasins size:', activeBasins.size, 'activeBasins:', Array.from(activeBasins));
     const inActiveBasin = (regionId) => {
-      // Se nenhuma bacia selecionada: mostrar todos
-      if (activeBasins.size === 0) return true;
+      // Nenhuma bacia ativa = não mostrar nada (desmarcar todas oculta a rede).
+      if (activeBasins.size === 0) return false;
       if (!regionId) return false;
       // Verificação direta (ex: 'bacia_uruguai_BR-RS')
       if (activeBasins.has(regionId)) return true;
