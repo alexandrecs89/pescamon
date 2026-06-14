@@ -6251,14 +6251,24 @@ function App() {
             >
               <Sprout size={13} /> APAs
             </button>
-            <div style={{ position: 'relative', display: 'inline-block' }}>
+            <div style={{ position: 'relative', display: 'inline-flex', gap: 4 }}>
+              {/* Mostrar/ocultar a rede de cursos (independente do filtro de bacias) */}
               <button
                 type="button"
                 className={`map-toggle-btn${showWatercourses ? ' active' : ''}`}
-                onClick={() => { setShowWatercourses(v => !v); setBasinDropdownOpen(v => !v); }}
+                onClick={() => setShowWatercourses(v => !v)}
                 title="Mostrar/ocultar cursos d'água"
               >
-                <Droplets size={13} /> Cursos {showWatercourses ? '▲' : '▼'}
+                <Droplets size={13} /> Cursos
+              </button>
+              {/* Abrir o menu de filtro de bacias (não altera a visibilidade) */}
+              <button
+                type="button"
+                className={`map-toggle-btn${basinDropdownOpen ? ' active' : ''}`}
+                onClick={() => setBasinDropdownOpen(v => !v)}
+                title="Filtrar bacias hidrográficas"
+              >
+                Bacias {basinDropdownOpen ? '▲' : '▼'}
               </button>
               {basinDropdownOpen && (
                 <div style={{
