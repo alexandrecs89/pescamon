@@ -4435,6 +4435,11 @@ function App() {
   // Paleta do heatmap de espécies: 'thermal' (azul→vermelho) | 'species' (tom da espécie). Persistida.
   const [heatPalette, setHeatPalette] = useState(() => { try { return localStorage.getItem('pescamon_heatpalette') || 'thermal'; } catch { return 'thermal'; } });
   useEffect(() => { try { localStorage.setItem('pescamon_heatpalette', heatPalette); } catch {} }, [heatPalette]);
+  // Slider de tempo do heatmap: série climática horária (48h) que re-scora a probabilidade por hora.
+  const [heatHourly, setHeatHourly] = useState(null);   // { scenarios: [...], nowIdx } | null
+  const [heatTime, setHeatTime] = useState(0);          // índice da hora no slider
+  const [heatTimeOn, setHeatTimeOn] = useState(false);  // modo tempo ligado?
+  const [heatHourlyLoading, setHeatHourlyLoading] = useState(false);
   const [spotModal, setSpotModal] = useState(null); // null | { lat, lng } | { spot } (view mode)
   const [spotForm, setSpotForm] = useState({ name: '', description: '', access_type: 'bank', species_ids: [], species_names: [] });
   const [spotSaving, setSpotSaving] = useState(false);
@@ -4458,6 +4463,17 @@ function App() {
       .finally(() => { if (!cancelled) setEnvLoading(false); });
     return () => { cancelled = true; };
   }, [envLayer, selectedCountry]);
+  // Busca a série climática horária quando o modo tempo do heatmap é ligado (ou troca de país).
+  useEffect(() => {
+    if (!heatTimeOn) return;
+    let cancelled = false;
+    setHeatHourlyLoading(true);
+    fetchHeatHourly(selectedCountry)
+      .then(r => { if (!cancelled) { setHeatHourly(r); if (r) setHeatTime(r.nowIdx ?? 0); } })
+      .catch(() => { if (!cancelled) setHeatHourly(null); })
+      .finally(() => { if (!cancelled) setHeatHourlyLoading(false); });
+    return () => { cancelled = true; };
+  }, [heatTimeOn, selectedCountry]);
   // Seletor geográfico (mapa país→estado). Abre só quando não há região salva.
   const [pickerOpen, setPickerOpen] = useState(() => !loadSavedCountry());
   const handlePickRegion = useCallback((regionId) => {
@@ -4769,6 +4785,10 @@ function App() {
   const selectedSpecies = species.find((item) => item.id === selectedSpeciesId) || species[0];
   const selectedSpeciesList = selectedSpeciesIds.map((id) => species.find((s) => s.id === id)).filter(Boolean);
   const selectedClimate = climateScenarios.find((item) => item.id === selectedClimateId) || climateScenarios[0];
+  // Clima efetivo que alimenta o SCORING do heatmap: no modo tempo, usa a hora do slider
+  // (re-score por hora); senão, o cenário selecionado. useDeferredValue mantém o arraste fluido.
+  const deferredHeatTime = React.useDeferredValue(heatTime);
+  const effectiveClimate = (heatTimeOn && heatHourly?.scenarios?.[deferredHeatTime]) || selectedClimate;
 
   function toggleSpecies(id) {
     setSelectedSpeciesIds((prev) => {
@@ -5139,9 +5159,9 @@ function App() {
           const bonus = calibrationBonus(speciesOccurrences);
           
           // Usar ensemble específico para afluentes se disponível
-          const tributaryEnsembleProb = predictEnsemble(tributaryEnsembleModels[spId], segment.center, selectedClimate);
-          const mainEnsembleProb = predictEnsemble(ensembleModels[spId], segment.center, selectedClimate);
-          const heuristicScore = calculateProbability(segment, sp, selectedClimate, speciesOccurrences, dischargeData);
+          const tributaryEnsembleProb = predictEnsemble(tributaryEnsembleModels[spId], segment.center, effectiveClimate);
+          const mainEnsembleProb = predictEnsemble(ensembleModels[spId], segment.center, effectiveClimate);
+          const heuristicScore = calculateProbability(segment, sp, effectiveClimate, speciesOccurrences, dischargeData);
           
           // Prioridade: ensemble de afluentes > ensemble principal > heurística
           let prob;
@@ -5158,7 +5178,7 @@ function App() {
         const probability = Math.round(totalProb / activeIds.length);
         return { ...segment, probability: isNaN(probability) ? 0 : probability };
       });
-  }, [tributarySegments, selectedSpecies, selectedSpeciesList, selectedClimate, occurrences, selectedSpeciesIds, ensembleModels, tributaryEnsembleModels, dischargeData, selectedWatercourseIds, selectedCountry]);
+  }, [tributarySegments, selectedSpecies, selectedSpeciesList, effectiveClimate, occurrences, selectedSpeciesIds, ensembleModels, tributaryEnsembleModels, dischargeData, selectedWatercourseIds, selectedCountry]);
 
   // Heatmap para EXTRA_RIVERS selecionados (Rio Negro, Uruguay, etc.)
   const scoredExtraRiverSegments = useMemo(() => {
@@ -5178,8 +5198,8 @@ function App() {
           const sp = species.find(s => s.id === spId);
           const speciesOccurrences = countOccurrencesInCell(segment, spId);
           const bonus = calibrationBonus(speciesOccurrences);
-          const ensembleProb = predictEnsemble(ensembleModels[spId], segment.center, selectedClimate);
-          const heuristicScore = calculateProbability(segment, sp, selectedClimate, speciesOccurrences, dischargeData);
+          const ensembleProb = predictEnsemble(ensembleModels[spId], segment.center, effectiveClimate);
+          const heuristicScore = calculateProbability(segment, sp, effectiveClimate, speciesOccurrences, dischargeData);
           const prob = ensembleProb !== null ? ensembleProb * 0.6 + heuristicScore * 0.4 : heuristicScore;
           totalProb += prob + bonus;
         }
@@ -5188,7 +5208,7 @@ function App() {
       }
     }
     return result;
-  }, [extraRiverGeometries, selectedSpeciesIds, selectedClimate, occurrences, ensembleModels, dischargeData, selectedWatercourseIds]);
+  }, [extraRiverGeometries, selectedSpeciesIds, effectiveClimate, occurrences, ensembleModels, dischargeData, selectedWatercourseIds]);
 
   // Busca dados reais de qualidade da água quando tributários são carregados
   useEffect(() => {
@@ -5423,7 +5443,7 @@ function App() {
             const em = ensembleModels[spId] || null;
             const speciesOccurrences = countOccurrencesInCell(segment, spId);
             const bonus = calibrationBonus(speciesOccurrences);
-            const heuristicScore = calculateProbability(segment, sp, selectedClimate, speciesOccurrences, dischargeData);
+            const heuristicScore = calculateProbability(segment, sp, effectiveClimate, speciesOccurrences, dischargeData);
             const ensemblePrediction = predictEnsemble(em, segment);
 
             let finalProbability;
@@ -5467,7 +5487,7 @@ function App() {
         })
         .sort((a, b) => b.probability - a.probability);
     },
-    [riverSegments, selectedSpecies, selectedSpeciesList, selectedClimate, occurrences, selectedSpeciesIds, ensembleModels, dischargeData, selectedWatercourseIds]
+    [riverSegments, selectedSpecies, selectedSpeciesList, effectiveClimate, occurrences, selectedSpeciesIds, ensembleModels, dischargeData, selectedWatercourseIds]
   );
 
   const probRange = useMemo(() => {
@@ -7087,6 +7107,37 @@ function App() {
                 <div style={{ width:130, height:10, borderRadius:5, background: heatGradientCss(heatPalette, activeColor) }} />
                 <span style={{ fontSize:'0.62rem', color:'#94a3b8' }}>alta</span>
               </div>
+              {/* Slider de tempo: re-scora o heatmap hora a hora (previsão 48h) */}
+              <div style={{ marginTop:7, borderTop:'1px solid rgba(255,255,255,0.08)', paddingTop:6 }}>
+                <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:8 }}>
+                  <button type="button" onClick={() => setHeatTimeOn(v => !v)}
+                    style={{ display:'flex', alignItems:'center', gap:4, padding:'2px 7px', fontSize:'0.6rem', fontWeight:700, cursor:'pointer', borderRadius:6,
+                      border:'1px solid rgba(255,255,255,0.16)',
+                      background: heatTimeOn ? 'rgba(56,189,248,0.25)' : 'transparent',
+                      color: heatTimeOn ? '#7dd3fc' : '#94a3b8' }}>⏱ Hora · {heatTimeOn ? 'on' : 'off'}</button>
+                  {heatTimeOn && heatHourly?.scenarios?.[heatTime] && (
+                    <span style={{ fontSize:'0.64rem', color:'#e2e8f0', fontWeight:600 }}>
+                      {heatHourly.scenarios[heatTime].name}
+                      {heatTime === heatHourly.nowIdx && <span style={{ color:'#22c55e', marginLeft:4 }}>• agora</span>}
+                    </span>
+                  )}
+                </div>
+                {heatTimeOn && (
+                  (heatHourlyLoading && !heatHourly) ? (
+                    <div style={{ fontSize:'0.6rem', color:'#94a3b8', marginTop:5 }}>carregando previsão…</div>
+                  ) : heatHourly?.scenarios?.length ? (
+                    <div style={{ display:'flex', alignItems:'center', gap:6, marginTop:5 }}>
+                      <input type="range" min={0} max={heatHourly.scenarios.length - 1} step={1} value={heatTime}
+                        onChange={e => setHeatTime(+e.target.value)}
+                        style={{ flex:1, accentColor:'#38bdf8', cursor:'pointer' }} />
+                      <button type="button" onClick={() => setHeatTime(heatHourly.nowIdx ?? 0)} title="Voltar para agora"
+                        style={{ fontSize:'0.58rem', color:'#7dd3fc', background:'none', border:'none', cursor:'pointer', padding:0 }}>agora</button>
+                    </div>
+                  ) : (
+                    <div style={{ fontSize:'0.6rem', color:'#f87171', marginTop:5 }}>previsão indisponível</div>
+                  )
+                )}
+              </div>
             </div>
           )}
           <MapLegend
@@ -8405,6 +8456,49 @@ function BiteTimeTimeline({ lat, lon, locLabel, pressureSensitivity = 0.5 }) {
 // Busca uma grade HORÁRIA (48h) da camada `kind` sobre o bbox do país, recortada à
 // fronteira oficial. Uma única chamada Open-Meteo (multi-coordenada). Cada ponto traz
 // uma série temporal (values[] e, no vento, dirs[]) para o slider de tempo.
+// Série climática horária (48h) no centro da região — alimenta o slider de tempo do
+// heatmap, permitindo re-scorar a probabilidade hora a hora. Cada item é compatível com
+// um cenário de `climateScenarios` (campos lidos por calculateProbability/pressureBonus).
+async function fetchHeatHourly(country) {
+  const c = COUNTRIES.find(x => x.id === country);
+  if (!c?.bbox) return null;
+  const lat = +((c.bbox.minLat + c.bbox.maxLat) / 2).toFixed(3);
+  const lon = +((c.bbox.minLon + c.bbox.maxLon) / 2).toFixed(3);
+  const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&hourly=temperature_2m,soil_temperature_0_to_7cm,shortwave_radiation,wind_speed_10m,surface_pressure&daily=sunrise,sunset&forecast_days=2&timezone=auto`;
+  const res = await fetch(url);
+  if (!res.ok) return null;
+  const data = await res.json();
+  const h = data.hourly;
+  if (!h?.time?.length) return null;
+  const sunrise = (data.daily?.sunrise?.[0] || '').slice(11);
+  const sunset = (data.daily?.sunset?.[0] || '').slice(11);
+  const dayNames = ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sáb'];
+  const nowMs = Date.now();
+  let nowIdx = 0, bestDelta = Infinity;
+  const scenarios = h.time.map((t, i) => {
+    const d = new Date(t);
+    const delta = Math.abs(d.getTime() - nowMs);
+    if (delta < bestDelta) { bestDelta = delta; nowIdx = i; }
+    const air = Math.round(h.temperature_2m?.[i] ?? 0);
+    const soil = h.soil_temperature_0_to_7cm?.[i] ?? null;
+    const pressure = Math.round(h.surface_pressure?.[i] ?? 1013);
+    const prevPressure = i > 0 ? Math.round(h.surface_pressure?.[i - 1] ?? pressure) : pressure;
+    return {
+      id: `h-${i}`,
+      name: `${dayNames[d.getDay()]} ${String(d.getHours()).padStart(2, '0')}h`,
+      hour: d.getHours(),
+      airTemperature: air,
+      waterTemperature: estimateWaterTemperature(air, soil),
+      solarRadiation: estimateSolarPercent(h.shortwave_radiation?.[i] ?? 0),
+      wind: Math.round(h.wind_speed_10m?.[i] ?? 0),
+      pressure,
+      pressureTrend: pressureTrendLabel(pressure, prevPressure),
+      sunrise, sunset, time: t,
+    };
+  });
+  return { scenarios, nowIdx };
+}
+
 async function fetchEnvGrid(country, kind) {
   const cfg = ENV_LAYERS[kind];
   const c = COUNTRIES.find(x => x.id === country);
