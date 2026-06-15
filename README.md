@@ -4,7 +4,7 @@
 
 A hidrografia de cada região vem de **dados oficiais do governo local** (ANA/IBGE no Brasil, DINAGUA no Uruguai), recortada à fronteira oficial e classificada por bacia. A escolha de região é feita por um **seletor geográfico no mapa** (mundo → país → estado).
 
-**Estado atual (junho 2026):** aplicação em produção em [pescamon.com.br](https://pescamon.com.br) / [pescamon-app.netlify.app](https://pescamon-app.netlify.app). Última sessão de desenvolvimento: 12/06/2026.
+**Estado atual (junho 2026):** aplicação em produção em [pescamon.com.br](https://pescamon.com.br) / [pescamon-app.netlify.app](https://pescamon-app.netlify.app). Última sessão de desenvolvimento: 15/06/2026.
 
 Stack: **React 18 + Vite · react-leaflet · Supabase · Open-Meteo · IndexedDB · PWA**
 
@@ -324,7 +324,7 @@ No Netlify: Site settings → Environment variables → adicionar as mesmas duas
 - **46 corpos d'água** + **~614 afluentes** + tributários por bacia/país (UY/AR/BR)
 - **11 macro-regiões** do Uruguai com seletor hierárquico por distância
 - **50 espécies** (cientes de país) com perfis ecológicos, conservação CARU/DINARA/IBAMA/SEMA-RS, vedas e tamanhos mínimos
-- **Heatmap morfológico completo**: bandas laterais (`lateralProfile`) em **todos** os cursos selecionados — Rio Santa Lucía, EXTRA_RIVERS (Rio Negro, Uruguay, etc.) e afluentes. Linhas estáticas somem ao ativar heatmap. Cor sempre derivada da espécie selecionada.
+- **Heatmap morfológico completo**: bandas laterais (`lateralProfile`) com **glow** em **todos** os cursos selecionados — Rio Santa Lucía, EXTRA_RIVERS (Rio Negro, Uruguay, etc.), afluentes UY e **rios do RS** (caminho de afluentes desacoplado do legado Santa Lucía). Linhas estáticas somem ao ativar heatmap. **Duas paletas alternáveis** na legenda: *Térmica* (azul→vermelho) e *Espécie* (tom da espécie); normalização relativa+absoluta; persistida em `localStorage`.
 - Bayesian-ensemble (logístico + random forest + prior espacial gaussiano adaptativo)
 - Pescaria Ativa com fotos, peso, isca e retomada automática de sessão
 - Planejador wizard 6 etapas + exportação Calendar/PDF/GPX
@@ -369,8 +369,8 @@ No Netlify: Site settings → Environment variables → adicionar as mesmas duas
 - [x] **Slider de tempo (camadas ambientais)**: `fetchEnvGrid` busca a série horária 48h; slider na legenda varre o forecast recolorindo o campo (e as setas de vento). _Falta estender ao heatmap de espécie._
 - [x] **Timeline de "bite time"** (`BiteTimeTimeline`): atividade horária 48h por local/espécie (crepúsculo + lua + pressão + vento + nuvens), com melhores janelas e marcador "agora".
 - [x] **Vento animado (partículas, estilo Windy)**: `WindParticlesLayer` adveca partículas pelo campo de vento (interpolado em pixels) com rastro que desvanece, por cima do campo de cor. Substitui as setas estáticas. (Animação só roda em navegador visível — o preview headless pausa o `requestAnimationFrame`.)
-- [ ] **Estender o slider de tempo ao heatmap de espécie** (re-score por hora): o scoring (`scoredSegments`) é acoplado ao legado do Santa Lucía (gate `__santa_lucia__`) — exige desacoplar o pipeline antes. Adiado.
-- [ ] **Legenda do heatmap**: hoje o `MapLegend` mostra escala absoluta verde→vermelho, mas o mapa desenha intensidade da cor da espécie (não batem) e as bacias da legenda estão fixas em UY. Alinhar cores + país-ciente.
+- [ ] **Estender o slider de tempo ao heatmap de espécie** (re-score por hora): o caminho de afluentes (`scoredTributarySegments`) já está desacoplado, mas o `scoredSegments` do rio principal ainda tem o gate `__santa_lucia__` — falta desacoplar o re-score por hora. Parcialmente destravado.
+- [x] **Legenda do heatmap (cores)**: o `MapLegend` agora reflete o gradiente real da paleta (antes mostrava verde→vermelho fixo que não batia com o render). Toggle Térmica/Espécie na legenda do mapa. _Resta_ tornar o `const BASINS` do `MapLegend` país-ciente (ainda fixo em UY).
 - [ ] **Vazão dinâmica (GloFAS)** por trecho (a coloração atual é por ordem/porte, estrutural).
 
 #### 🥇 Alta prioridade — escalar territorialmente
@@ -397,6 +397,9 @@ No Netlify: Site settings → Environment variables → adicionar as mesmas duas
 
 #### ✅ Concluído recentemente (jun/2026)
 
+- [x] **Heatmap de espécies — upgrade visual + RS**: duas paletas alternáveis (Térmica/Espécie) com glow e normalização relativa+absoluta; legenda alinhada à paleta; **passou a renderizar nos rios do RS** (corrigido o memo preso por mutação in-place do `_trib.data` + match de ids compostos BR; teto de 2500 segmentos)
+- [x] **Vento animado (partículas estilo Windy)**: `WindParticlesLayer` advecta partículas pelo campo de vento, substituindo as setas estáticas
+- [x] **Porte/vazão (coloração por ordem)**: escala remapeada para a faixa 2–7 com rampa multi-matiz e largura/opacidade por ordem; seleção de bacias persistida (não reativa todas ao desligar)
 - [x] **Expansão Santa Catarina (BR-SC)**: hidrografia oficial (45.951 trechos, 2 bacias), 179 UCs CNUC, legislação (piracema + tainha) e espécies; clicável no seletor geográfico
 - [x] **Hidrografia oficial RS** (ANA BHO 2017, 43.522 trechos, 4 bacias, recorte IBGE) + render por bacia
 - [x] **Hidrografia oficial UY** (DINAGUA, 6 bacias) substituindo o MVP do Santa Lucía

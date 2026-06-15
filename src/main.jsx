@@ -1601,7 +1601,14 @@ async function loadTribsForCountry(countryId) {
     console.log('[TRIB] País já carregado, retornando');
     return;
   }
-  
+
+  // Token de geração: trocar de país rápido dispara loads concorrentes que faziam push()
+  // no MESMO _trib.data, misturando trechos de duas regiões. Cada load pega um token; após
+  // cada await checamos se ainda somos o load mais recente — se não, abortamos sem publicar.
+  const myToken = (_trib.loadToken || 0) + 1;
+  _trib.loadToken = myToken;
+  const isStale = () => _trib.loadToken !== myToken;
+
   console.log('[TRIB] Iniciando carregamento para', countryId);
   _trib.data = [];
   _trib.seenIds = new Set();
@@ -1684,7 +1691,8 @@ async function loadTribsForCountry(countryId) {
           continue;
         }
         const geojson = await response.json();
-        
+        if (isStale()) { console.log('[TRIB] Load superseded — abortando', countryId); return; }
+
         // Verificar se é GeoJSON ou formato trib_*.json
         if (geojson.features && Array.isArray(geojson.features)) {
           // Formato GeoJSON
@@ -1762,9 +1770,10 @@ async function loadTribsForCountry(countryId) {
     
     // Carregar Santa Lucía apenas para UY (manter compatibilidade)
     if (countryId === 'UY') {
-      await loadSantaLucia();
+      await loadSantaLucia(myToken);
     }
-    
+    if (isStale()) { console.log('[TRIB] Load superseded — abortando', countryId); return; }
+
     // Publica uma NOVA referência do array antes de notificar. Durante o load os itens
     // são adicionados via push() na mesma referência; sem trocar o ref, useSyncExternalStore
     // e os useMemo([tributaryLines]) não detectam a mudança (ficam presos no valor calculado
@@ -1774,17 +1783,21 @@ async function loadTribsForCountry(countryId) {
     console.log('[TRIB] Notificando', _trib.subscribers.size, 'subscribers');
     _tribNotify();
     console.log('[TRIB] _trib.data.length após notificar:', _trib.data.length);
-    
+
   } catch (error) {
     console.error('[TRIB] Erro geral no carregamento:', error);
   } finally {
-    _trib.loading = false;
-    _tribNotify();
+    // Só o load mais recente reseta o estado/notifica (um load superseded não mexe no atual).
+    if (_trib.loadToken === myToken) {
+      _trib.loading = false;
+      _tribNotify();
+    }
   }
 }
 
 // Função separada para Santa Lucía (mantida para compatibilidade)
-async function loadSantaLucia() {
+// `token` = geração do load chamador; se outro load assumir nesse meio-tempo, não mutamos.
+async function loadSantaLucia(token) {
   try {
     const response = await fetch('/tributarios.geojson');
     if (!response.ok) return;
@@ -1817,11 +1830,12 @@ async function loadSantaLucia() {
         paths: f.geometry.coordinates.map(line => line.map(([lon, lat]) => [lat, lon]))
       }));
     
+    if (token != null && _trib.loadToken !== token) return; // load superseded — não mistura
     const fresh = fromRelations.filter(t => !_trib.seenIds.has(t.id));
     fresh.forEach(t => _trib.seenIds.add(t.id));
-    if (fresh.length) { 
-      _trib.data = [..._trib.data, ...fresh]; 
-      _tribNotify(); 
+    if (fresh.length) {
+      _trib.data = [..._trib.data, ...fresh];
+      _tribNotify();
     }
     
   } catch (error) {
