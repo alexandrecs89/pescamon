@@ -368,9 +368,10 @@ No Netlify: Site settings → Environment variables → adicionar as mesmas duas
 - [x] **Vazão/porte como coloração da rede**: modo `riverColorBy='order'` colore os trechos por ordem do rio (BHO) — cabeceiras claras/finas → troncos azul-escuro/grossos. (Vazão dinâmica por trecho via GloFAS continua futura.)
 - [x] **Slider de tempo (camadas ambientais)**: `fetchEnvGrid` busca a série horária 48h; slider na legenda varre o forecast recolorindo o campo (e as setas de vento). _Falta estender ao heatmap de espécie._
 - [x] **Timeline de "bite time"** (`BiteTimeTimeline`): atividade horária 48h por local/espécie (crepúsculo + lua + pressão + vento + nuvens), com melhores janelas e marcador "agora".
-- [ ] **Estender o slider de tempo ao heatmap de espécie** (re-score por hora) e **vazão dinâmica (GloFAS)** por trecho.
-- [ ] **Timeline de atividade ("bite time")** por local/espécie: score temporal (tipo 4×6h do Windy) com solunar + pressão (`pressureSensitivity`) + clima.
-- [ ] **Polir o heatmap de espécie**: gradiente contínuo + legenda + slider de tempo (varrer o forecast recolorindo o mapa).
+- [x] **Vento animado (partículas, estilo Windy)**: `WindParticlesLayer` adveca partículas pelo campo de vento (interpolado em pixels) com rastro que desvanece, por cima do campo de cor. Substitui as setas estáticas. (Animação só roda em navegador visível — o preview headless pausa o `requestAnimationFrame`.)
+- [ ] **Estender o slider de tempo ao heatmap de espécie** (re-score por hora): o scoring (`scoredSegments`) é acoplado ao legado do Santa Lucía (gate `__santa_lucia__`) — exige desacoplar o pipeline antes. Adiado.
+- [ ] **Legenda do heatmap**: hoje o `MapLegend` mostra escala absoluta verde→vermelho, mas o mapa desenha intensidade da cor da espécie (não batem) e as bacias da legenda estão fixas em UY. Alinhar cores + país-ciente.
+- [ ] **Vazão dinâmica (GloFAS)** por trecho (a coloração atual é por ordem/porte, estrutural).
 
 #### 🥇 Alta prioridade — escalar territorialmente
 

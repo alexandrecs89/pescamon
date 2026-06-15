@@ -6373,6 +6373,7 @@ function App() {
 
           {/* Camada ambiental — sob os rios, não-interativa */}
           {envLayer && envGrid && <EnvCanvasLayer grid={envGrid} timeIndex={envTime} />}
+          {envLayer === 'wind' && envGrid && <WindParticlesLayer grid={envGrid} timeIndex={envTime} />}
 
           {/* IoT Sensors Layer */}
           {iotSensors.map(sensor => (
@@ -6939,7 +6940,7 @@ function App() {
                 <div style={{ flex:1, height:10, borderRadius:5, background: _envGradientCss(ENV_LAYERS[envLayer]) }} />
                 <span style={{ fontSize:'0.62rem', color:'#94a3b8' }}>{ENV_LAYERS[envLayer].domain[1]} {ENV_LAYERS[envLayer].unit}</span>
               </div>
-              {envLayer === 'wind' && <div style={{ fontSize:'0.6rem', color:'#64748b', marginTop:3 }}>setas = direção do vento</div>}
+              {envLayer === 'wind' && <div style={{ fontSize:'0.6rem', color:'#64748b', marginTop:3 }}>partículas animadas = direção/força do vento</div>}
               {envGrid?.times?.length > 1 && (
                 <div style={{ marginTop:7 }}>
                   <input type="range" min={0} max={envGrid.times.length - 1}
@@ -8357,36 +8358,84 @@ function EnvCanvasLayer({ grid, timeIndex = 0, opacity = 0.5 }) {
         ctx.beginPath(); ctx.arc(cp.x, cp.y, R, 0, Math.PI * 2); ctx.fill();
       }
       ctx.globalAlpha = 1;
-      // 2) setas (vento) — apontam para onde o vento vai (dir meteorológica + 180°)
-      if (cfg.arrows) {
-        const len = Math.min(stepPx * 0.55, 26);
-        ctx.strokeStyle = 'rgba(255,255,255,0.9)';
-        ctx.fillStyle = 'rgba(255,255,255,0.9)';
-        ctx.lineWidth = 1.4;
-        for (const p of grid.points) {
-          const dir = p.dirs?.[ti];
-          if (dir == null) continue;
-          const cp = map.latLngToContainerPoint([p.lat, p.lng]);
-          if (cp.x < 0 || cp.x > size.x || cp.y < 0 || cp.y > size.y) continue;
-          const th = (dir + 180) * Math.PI / 180;
-          const dx = Math.sin(th), dy = -Math.cos(th);
-          const x0 = cp.x - dx * len / 2, y0 = cp.y - dy * len / 2;
-          const x1 = cp.x + dx * len / 2, y1 = cp.y + dy * len / 2;
-          ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1, y1); ctx.stroke();
-          // ponta da seta
-          const ah = 5, aa = 0.5;
-          ctx.beginPath();
-          ctx.moveTo(x1, y1);
-          ctx.lineTo(x1 - ah * (dx * Math.cos(aa) - dy * Math.sin(aa)), y1 - ah * (dy * Math.cos(aa) + dx * Math.sin(aa)));
-          ctx.lineTo(x1 - ah * (dx * Math.cos(-aa) - dy * Math.sin(-aa)), y1 - ah * (dy * Math.cos(-aa) + dx * Math.sin(-aa)));
-          ctx.closePath(); ctx.fill();
-        }
-      }
+      // (vento: a direção é mostrada pelas partículas animadas — WindParticlesLayer)
     };
     draw();
     map.on('moveend zoomend viewreset resize', draw);
     return () => { map.off('moveend zoomend viewreset resize', draw); L.DomUtil.remove(canvas); };
   }, [map, grid, timeIndex, opacity]);
+  return null;
+}
+
+// Partículas de vento animadas (estilo Windy) por cima do campo de cor. Advecta
+// partículas pelo vetor de vento (interpolado da grade, em espaço de pixels) com
+// rastro que desvanece. Não-interativo; só para a camada de vento.
+function WindParticlesLayer({ grid, timeIndex = 0 }) {
+  const map = useMap();
+  useEffect(() => {
+    if (!map || !window.L || grid?.kind !== 'wind' || !grid.points?.length) return;
+    const L = window.L;
+    const ti = Math.max(0, Math.min(timeIndex, (grid.times?.length || 1) - 1));
+    const canvas = L.DomUtil.create('canvas', 'leaflet-zoom-animated');
+    canvas.style.pointerEvents = 'none';
+    map.getPanes().overlayPane.appendChild(canvas);
+    const ctx = canvas.getContext('2d');
+    let raf = 0, running = true, particles = [], field = [];
+    const MAX_AGE = 90;
+
+    function rebuild() {
+      const s = map.getSize();
+      canvas.width = s.x; canvas.height = s.y;
+      L.DomUtil.setPosition(canvas, map.containerPointToLayerPoint([0, 0]));
+      // grade projetada em pixels (vetor do vento por ponto, no tempo ti)
+      field = [];
+      for (const p of grid.points) {
+        const dir = p.dirs?.[ti], spd = p.values?.[ti];
+        if (dir == null || spd == null) continue;
+        const cp = map.latLngToContainerPoint([p.lat, p.lng]);
+        const th = (dir + 180) * Math.PI / 180; // para onde o vento vai
+        const mag = Math.min(spd / 40, 1) * 2.6 + 0.35; // px/quadro
+        field.push({ x: cp.x, y: cp.y, vx: Math.sin(th) * mag, vy: -Math.cos(th) * mag });
+      }
+      const n = Math.min(800, Math.max(120, Math.round(s.x * s.y / 2400)));
+      particles = Array.from({ length: n }, () => ({ x: Math.random() * s.x, y: Math.random() * s.y, age: Math.random() * MAX_AGE }));
+      ctx.clearRect(0, 0, s.x, s.y);
+    }
+    function windAt(x, y) {
+      // vizinho mais próximo na grade (em pixels)
+      let best = null, bd = Infinity;
+      for (const f of field) { const d = (f.x - x) * (f.x - x) + (f.y - y) * (f.y - y); if (d < bd) { bd = d; best = f; } }
+      return best;
+    }
+    function frame() {
+      if (!running) return;
+      const s = map.getSize();
+      // desvanece o rastro
+      ctx.globalCompositeOperation = 'destination-out';
+      ctx.fillStyle = 'rgba(0,0,0,0.10)';
+      ctx.fillRect(0, 0, s.x, s.y);
+      ctx.globalCompositeOperation = 'source-over';
+      ctx.strokeStyle = 'rgba(255,255,255,0.82)';
+      ctx.lineWidth = 1.1;
+      ctx.beginPath();
+      for (const p of particles) {
+        const w = windAt(p.x, p.y);
+        if (!w || p.age > MAX_AGE || p.x < 0 || p.x > s.x || p.y < 0 || p.y > s.y) {
+          p.x = Math.random() * s.x; p.y = Math.random() * s.y; p.age = 0; continue;
+        }
+        const nx = p.x + w.vx, ny = p.y + w.vy;
+        ctx.moveTo(p.x, p.y); ctx.lineTo(nx, ny);
+        p.x = nx; p.y = ny; p.age++;
+      }
+      ctx.stroke();
+      raf = requestAnimationFrame(frame);
+    }
+    rebuild();
+    const onReset = () => rebuild();
+    map.on('moveend zoomend viewreset resize', onReset);
+    frame();
+    return () => { running = false; cancelAnimationFrame(raf); map.off('moveend zoomend viewreset resize', onReset); L.DomUtil.remove(canvas); };
+  }, [map, grid, timeIndex]);
   return null;
 }
 
