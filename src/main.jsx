@@ -236,6 +236,30 @@ function saveCountry(id) {
   try { localStorage.setItem('pescamon_country', id); } catch {}
 }
 
+// Persistência da seleção de bacias por país (sobrevive a reload/remontagem do App).
+// Sem registro salvo → null (o chamador cai no default "todas").
+function loadSavedBasins(country) {
+  try {
+    const raw = localStorage.getItem('pescamon_basins');
+    if (!raw) return null;
+    const map = JSON.parse(raw);
+    const ids = map?.[country];
+    if (!Array.isArray(ids)) return null;
+    // Filtra contra os ids válidos do país (descarta bacias removidas/renomeadas).
+    const valid = allBasinIds(country);
+    return new Set(ids.filter(id => valid.has(id)));
+  } catch { return null; }
+}
+
+function saveBasins(country, set) {
+  try {
+    const raw = localStorage.getItem('pescamon_basins');
+    const map = raw ? (JSON.parse(raw) || {}) : {};
+    map[country] = [...set];
+    localStorage.setItem('pescamon_basins', JSON.stringify(map));
+  } catch {}
+}
+
 // Polígono preciso do RS com coordenadas reais das cidades
 // Ijuí: -28.4, Santa Maria: -29.7, Passo Fundo: -28.3, Erechim: -27.6
 // Norte: fronteira com SC aproximadamente em -27.0 no oeste, descendo para -28.9 no leste
@@ -4342,7 +4366,11 @@ function App() {
   const [showSnapAreas, setShowSnapAreas] = useState(true);
   const [protectedAreas, setProtectedAreas] = useState([]); // áreas carregadas por país (RS=UCs ICMBio)
   const [showWatercourses, setShowWatercourses] = useState(true);
-  const [activeBasins, setActiveBasins] = useState(() => allBasinIds(loadSavedCountry() || 'UY')); // bacias visíveis (inicial = todas)
+  // Bacias visíveis. Restaura a seleção salva (sobrevive a remontagem/reload); default = todas.
+  const [activeBasins, setActiveBasins] = useState(() => {
+    const c = loadSavedCountry() || 'UY';
+    return loadSavedBasins(c) || allBasinIds(c);
+  });
   
     const [basinDropdownOpen, setBasinDropdownOpen] = useState(false);
   const [showFishingSpots, setShowFishingSpots] = useState(true);
@@ -4385,9 +4413,11 @@ function App() {
     saveCountry(regionId);
     setSelectedWatercourseIds([]);
     setSelectedRegion(null);
-    setActiveBasins(allBasinIds(regionId));
+    setActiveBasins(loadSavedBasins(regionId) || allBasinIds(regionId));
     setPickerOpen(false);
   }, []);
+  // Persiste a seleção de bacias por país, p/ sobreviver a reload/remontagem do App.
+  useEffect(() => { saveBasins(selectedCountry, activeBasins); }, [selectedCountry, activeBasins]);
   const [userLocation, setUserLocation] = useState(null);
   const [mapCenter, setMapCenter] = useState([-34.735, -56.275]);
   const [mapZoom] = useState(8);
@@ -6959,9 +6989,10 @@ function App() {
               <div style={{ fontSize:'0.7rem', color:'#cbd5e1', marginBottom:5, fontWeight:600 }}>🌊 Porte do rio (vazão relativa)</div>
               <div style={{ display:'flex', alignItems:'center', gap:6 }}>
                 <span style={{ fontSize:'0.62rem', color:'#94a3b8' }}>cabeceira</span>
-                <div style={{ width:120, height:10, borderRadius:5, background:'linear-gradient(90deg, rgb(125,211,252), rgb(56,189,248), rgb(14,165,233), rgb(37,99,235), rgb(30,58,138))' }} />
+                <div style={{ width:120, height:10, borderRadius:5, background:'linear-gradient(90deg, rgb(71,85,105), rgb(37,99,235), rgb(14,165,233), rgb(45,212,191), rgb(165,243,252), rgb(236,254,255))' }} />
                 <span style={{ fontSize:'0.62rem', color:'#94a3b8' }}>tronco</span>
               </div>
+              <div style={{ fontSize:'0.58rem', color:'#64748b', marginTop:4 }}>linha mais grossa/clara = maior porte</div>
             </div>
           )}
           <MapLegend
@@ -8008,12 +8039,12 @@ const _fmtFishKg = (kg) => !kg ? 'desconhecido' : kg < 1 ? `${Math.round(kg * 10
 // (100k+ trechos) sem travar a reconciliação nem saturar o canvas por contagem de camadas.
 // NÃO-interativa: o clique é resolvido pelo RiverClickHandler no nível do mapa. Memoizada
 // (positions é estável entre cliques) para não redesenhar à toa.
-const BasinLayer = React.memo(function BasinLayer({ positions, color, regionId, lineWeight }) {
+const BasinLayer = React.memo(function BasinLayer({ positions, color, regionId, lineWeight, opacity = 0.7 }) {
   const renderer = getBasinRenderer(regionId || 'default');
   if (!positions || !positions.length) return null;
   return (
     <Polyline positions={positions} interactive={false}
-      pathOptions={{ color, weight: lineWeight, opacity: 0.7, lineCap: 'round', lineJoin: 'round' }}
+      pathOptions={{ color, weight: lineWeight, opacity, lineCap: 'round', lineJoin: 'round' }}
       renderer={renderer}
     />
   );
@@ -8138,8 +8169,11 @@ function _envColor(stops, v) {
   }
   return stops[stops.length-1][1];
 }
-// Cor por porte do rio (ordem 1–10): cabeceiras claras/finas → troncos azul-escuro/grossos.
-const _ORDER_STOPS = [[1,[125,211,252]],[3,[56,189,248]],[5,[14,165,233]],[7,[37,99,235]],[10,[30,58,138]]];
+// Cor por porte do rio. ~80% dos trechos do RS são ordem 3-5, então a escala é
+// concentrada na faixa 2..7 (onde os dados vivem; <2 e >7 são raríssimos e ficam nos
+// extremos por clamp). Rampa de LUMINÂNCIA escuro→quase-branco: cabeceiras apagadas
+// recuam, troncos "brilham" — separa bem as ordens médias mesmo num mapa escuro.
+const _ORDER_STOPS = [[2,[71,85,105]],[3,[37,99,235]],[4,[14,165,233]],[5,[45,212,191]],[6,[165,243,252]],[7,[236,254,255]]];
 function _orderColor(o) { const [r,g,b] = _envColor(_ORDER_STOPS, o); return `rgb(${r},${g},${b})`; }
 
 // CSS linear-gradient para a legenda (a partir das paradas e do domínio)
@@ -8668,7 +8702,12 @@ function AllWatercourses({ tributaryLines, waterQualityData, species, occurrence
         const isOrder = colorBy === 'order' && g.key.startsWith('ord-');
         const ord = isOrder ? +g.key.slice(4) : 0;
         const color = isOrder ? _orderColor(ord) : (REGION_COLORS[g.key] || '#3b82f6');
-        const w = isOrder ? Math.max(0.6, Math.min(lineWeight * 2.2, 0.5 + ord * 0.55)) : lineWeight;
+        // Porte: remapeia ordem p/ a faixa 2..7 (onde fica ~99% dos trechos) — assim as
+        // ordens médias 3-5 ganham espessuras/opacidades bem distintas; troncos grossos e
+        // opacos, cabeceiras finas e translúcidas.
+        const t = isOrder ? Math.min(1, Math.max(0, (ord - 2) / 5)) : 0;
+        const w = isOrder ? (0.4 + Math.pow(t, 1.6) * (lineWeight * 4)) : lineWeight;
+        const op = isOrder ? (0.4 + t * 0.55) : 0.7;
         return (
           <BasinLayer
             key={`${g.key}-${selectedCountry}`}
@@ -8676,6 +8715,7 @@ function AllWatercourses({ tributaryLines, waterQualityData, species, occurrence
             positions={g.positions}
             color={color}
             lineWeight={w}
+            opacity={op}
           />
         );
       })}
