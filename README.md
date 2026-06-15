@@ -276,7 +276,7 @@ Um pilar do projeto é ajudar o pescador a pescar **dentro da lei**. As camadas 
 - Hidrografia oficial disponível para **RS**, **SC** e **UY**; demais estados/regiões seguem o pipeline de expansão (ver `docs/EXPANSAO-ESTADOS.md`).
 - Os scripts de hidrografia por estado (`build_rs_hydrography.mjs`, `build_sc_hydrography.mjs`) ainda repetem código — falta unificá-los num único script parametrizado por UF.
 - Espécies de SC usam o catálogo compartilhado da Bacia do Uruguai; um refinamento por curso (litoral vs. interior) fica como melhoria futura.
-- Bug conhecido: troca muito rápida de país pode somar trechos de duas regiões (fetches em voo não cancelados).
+- ~~Bug: troca muito rápida de país somava trechos de duas regiões~~ — **corrigido** (loads de hidrografia concorrentes agora abortam por token de geração).
 
 ## Deploy e execução
 
@@ -381,7 +381,7 @@ No Netlify: Site settings → Environment variables → adicionar as mesmas duas
 
 #### 🥈 Média prioridade — qualidade e produto
 
-- [ ] **Bug: acúmulo de rios ao trocar de país rapidamente** — cancelar fetches de hidrografia em voo ao trocar de região (evita somar trechos de UY+RS). Conhecido e isolado.
+- [x] **Bug: acúmulo de rios ao trocar de país rapidamente** — loads de hidrografia concorrentes agora abortam por token de geração (`_trib.loadToken`), evitando somar trechos de UY+RS.
 - [ ] **Expansão Argentina**: Río Paraná (Corrientes, Entre Ríos), baixo Río Uruguay, Delta — dados oficiais (IGN/INA) ou HydroSHEDS como fallback; espécies Dorado, Surubí, Pacú, Manguruyú.
 - [ ] **Onboarding pelo seletor geográfico**: usar o mapa de seleção como tela de boas-vindas para novos usuários (primeira escolha de região guiada).
 - [ ] **API pública para pesquisadores**: OpenAPI documentada via Supabase Edge Functions (rate-limit, auth por token).
