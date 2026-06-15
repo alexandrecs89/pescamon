@@ -9372,4 +9372,10 @@ function FishingSessionModal({
   );
 }
 
-createRoot(document.getElementById('root')).render(<ErrorBoundary><LangProvider><ThemeProvider><ToastProvider><App /></ToastProvider></ThemeProvider></LangProvider></ErrorBoundary>);
+// Reaproveita o root entre execuções do módulo (HMR de dev): sem o guard, recarregar
+// chamaria createRoot() de novo no mesmo #root → aviso "container already passed to
+// createRoot()". Guardamos o root no próprio container.
+const _rootEl = document.getElementById('root');
+const _root = _rootEl.__reactRoot || (_rootEl.__reactRoot = createRoot(_rootEl));
+_root.render(<ErrorBoundary><LangProvider><ThemeProvider><ToastProvider><App /></ToastProvider></ThemeProvider></LangProvider></ErrorBoundary>);
+
