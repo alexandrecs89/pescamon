@@ -8397,7 +8397,7 @@ function WindParticlesLayer({ grid, timeIndex = 0 }) {
         const mag = Math.min(spd / 40, 1) * 2.6 + 0.35; // px/quadro
         field.push({ x: cp.x, y: cp.y, vx: Math.sin(th) * mag, vy: -Math.cos(th) * mag });
       }
-      const n = Math.min(800, Math.max(120, Math.round(s.x * s.y / 2400)));
+      const n = Math.min(1100, Math.max(180, Math.round(s.x * s.y / 1700)));
       particles = Array.from({ length: n }, () => ({ x: Math.random() * s.x, y: Math.random() * s.y, age: Math.random() * MAX_AGE }));
       ctx.clearRect(0, 0, s.x, s.y);
     }
@@ -8410,13 +8410,14 @@ function WindParticlesLayer({ grid, timeIndex = 0 }) {
     function frame() {
       if (!running) return;
       const s = map.getSize();
-      // desvanece o rastro
+      // desvanece o rastro (mais lento = rastro mais longo)
       ctx.globalCompositeOperation = 'destination-out';
-      ctx.fillStyle = 'rgba(0,0,0,0.10)';
+      ctx.fillStyle = 'rgba(0,0,0,0.065)';
       ctx.fillRect(0, 0, s.x, s.y);
       ctx.globalCompositeOperation = 'source-over';
-      ctx.strokeStyle = 'rgba(255,255,255,0.82)';
-      ctx.lineWidth = 1.1;
+      ctx.strokeStyle = 'rgba(255,255,255,0.92)';
+      ctx.lineWidth = 1.4;
+      ctx.lineCap = 'round';
       ctx.beginPath();
       for (const p of particles) {
         const w = windAt(p.x, p.y);
