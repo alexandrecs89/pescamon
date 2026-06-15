@@ -7093,6 +7093,7 @@ function App() {
             heatmapActive={heatmapActive}
             activeColor={activeColor}
             heatGradient={heatGradientCss(heatPalette, activeColor)}
+            basins={BASINS_BY_COUNTRY[selectedCountry] || BASINS_BY_COUNTRY['UY']}
             showSnapAreas={showSnapAreas}
             showWatercourses={showWatercourses}
             showFishingSpots={showFishingSpots}

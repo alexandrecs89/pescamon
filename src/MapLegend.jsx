@@ -116,6 +116,7 @@ export default function MapLegend({
   heatmapActive,
   activeColor,
   heatGradient,
+  basins,
   showSnapAreas,
   showWatercourses,
   showFishingSpots,
@@ -296,14 +297,14 @@ export default function MapLegend({
             </Section>
           )}
 
-          {/* Cursos d'água */}
+          {/* Cursos d'água — bacias da região ativa (fallback: UY) */}
           {showWatercourses && (
             <Section title="Bacias Hidrográficas">
-              {BASINS.map(b => (
+              {(basins && basins.length ? basins : BASINS).map(b => (
                 <LegendRow
-                  key={b.label}
+                  key={b.id || b.label}
                   left={<LineSwatch color={b.color} />}
-                  label={b.label}
+                  label={b.name || b.label}
                 />
               ))}
             </Section>
