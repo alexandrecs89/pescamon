@@ -1765,7 +1765,12 @@ async function loadTribsForCountry(countryId) {
       await loadSantaLucia();
     }
     
-    // Notificar subscribers
+    // Publica uma NOVA referência do array antes de notificar. Durante o load os itens
+    // são adicionados via push() na mesma referência; sem trocar o ref, useSyncExternalStore
+    // e os useMemo([tributaryLines]) não detectam a mudança (ficam presos no valor calculado
+    // quando o array ainda estava vazio — era o que zerava o heatmap de afluentes no RS).
+    // No UY isso era mascarado porque loadSantaLucia() reatribui _trib.data a um novo array.
+    _trib.data = _trib.data.slice();
     console.log('[TRIB] Notificando', _trib.subscribers.size, 'subscribers');
     _tribNotify();
     console.log('[TRIB] _trib.data.length após notificar:', _trib.data.length);
@@ -3740,6 +3745,36 @@ function smoothProbabilityColor(probability) {
   return intensityColor('#ef4444', probability);
 }
 
+// === Paletas do heatmap de espécies (t ∈ 0..1) ===========================
+// 'thermal': mapa de calor clássico azul→ciano→verde→amarelo→laranja→vermelho.
+// 'species': mantém a cor da espécie como identidade, mas com muito mais
+//            dinâmica (escuro-frio → cor cheia → quase-branco brilhante).
+const _THERMAL_STOPS = [[0,[37,99,235]],[0.2,[6,182,212]],[0.45,[34,197,94]],[0.65,[234,179,8]],[0.82,[249,115,22]],[1,[239,68,68]]];
+function _thermalColor(t) { const [r,g,b] = _envColor(_THERMAL_STOPS, clamp(t, 0, 1)); return `rgb(${r},${g},${b})`; }
+function _speciesHeatColor(baseHex, t) {
+  const { h } = hexToHsl(baseHex);
+  t = clamp(t, 0, 1);
+  const s = 45 + t * 45;          // 45 → 90: cor ganha saturação ao subir
+  const l = 24 + Math.pow(t, 0.85) * 68; // 24 → 92: escuro (baixo) → claro/brilho (alto)
+  return hslToHex(h, s, l);
+}
+function heatColor(palette, baseHex, t) {
+  return palette === 'thermal' ? _thermalColor(t) : _speciesHeatColor(baseHex, t);
+}
+// t∈0..1 do heatmap: mistura a posição RELATIVA no rio (realça o contraste local)
+// com a probabilidade ABSOLUTA (evita que um rio uniformemente baixo "invente" um
+// ponto quente — agora ele fica frio de verdade).
+function heatT(prob, minP, span) {
+  const rel = (prob - minP) / (span || 1);
+  const abs = prob / 100;
+  return clamp(rel * 0.55 + abs * 0.45, 0, 1);
+}
+// Rampa CSS para a legenda (pré-calculada em 7 paradas).
+function heatGradientCss(palette, baseHex) {
+  const stops = [0, 0.17, 0.34, 0.5, 0.67, 0.84, 1];
+  return `linear-gradient(90deg, ${stops.map(s => heatColor(palette, baseHex, s)).join(', ')})`;
+}
+
 // helper: gera polígono hexagonal aproximado a partir de centro e raio em graus
 function approxHexPoly(lat, lon, latR, lonR, n = 8) {
   return Array.from({ length: n }, (_, i) => {
@@ -4383,6 +4418,9 @@ function App() {
   const [envMenuOpen, setEnvMenuOpen] = useState(false);
   const [envTime, setEnvTime] = useState(0); // índice da hora no slider de tempo
   const [riverColorBy, setRiverColorBy] = useState('basin'); // 'basin' | 'order' (vazão/porte)
+  // Paleta do heatmap de espécies: 'thermal' (azul→vermelho) | 'species' (tom da espécie). Persistida.
+  const [heatPalette, setHeatPalette] = useState(() => { try { return localStorage.getItem('pescamon_heatpalette') || 'thermal'; } catch { return 'thermal'; } });
+  useEffect(() => { try { localStorage.setItem('pescamon_heatpalette', heatPalette); } catch {} }, [heatPalette]);
   const [spotModal, setSpotModal] = useState(null); // null | { lat, lng } | { spot } (view mode)
   const [spotForm, setSpotForm] = useState({ name: '', description: '', access_type: 'bank', species_ids: [], species_names: [] });
   const [spotSaving, setSpotSaving] = useState(false);
@@ -5068,6 +5106,15 @@ function App() {
     const selectedTribNames = new Set(
       tributaryLines.filter((t) => selectedWatercourseIdsSet.has(t.id)).map((t) => t.name)
     );
+    // Estados BR: o seletor agrupa trechos por nome e usa ids compostos
+    // `${país}:${regionId}:${nome}` — então casamos pelo nome extraído do id, já que
+    // segment.tributaryName guarda o nome bruto (= nome do grupo).
+    if (/^BR-/.test(selectedCountry)) {
+      for (const id of selectedWatercourseIds) {
+        const parts = String(id).split(':');
+        if (parts.length >= 3 && parts[0] === selectedCountry) selectedTribNames.add(parts.slice(2).join(':'));
+      }
+    }
     return tributarySegments
       .filter((segment) => selectedTribNames.has(segment.tributaryName))
       .map((segment) => {
@@ -5097,7 +5144,7 @@ function App() {
         const probability = Math.round(totalProb / activeIds.length);
         return { ...segment, probability: isNaN(probability) ? 0 : probability };
       });
-  }, [tributarySegments, selectedSpecies, selectedSpeciesList, selectedClimate, occurrences, selectedSpeciesIds, ensembleModels, tributaryEnsembleModels, dischargeData, selectedWatercourseIds]);
+  }, [tributarySegments, selectedSpecies, selectedSpeciesList, selectedClimate, occurrences, selectedSpeciesIds, ensembleModels, tributaryEnsembleModels, dischargeData, selectedWatercourseIds, selectedCountry]);
 
   // Heatmap para EXTRA_RIVERS selecionados (Rio Negro, Uruguay, etc.)
   const scoredExtraRiverSegments = useMemo(() => {
@@ -5539,23 +5586,25 @@ function App() {
     const riverWidthM = 60;
 
     return scoredSegments.map((cell) => {
-      const normalized = ((cell.probability - probRange.min) / probRange.span) * 100;
-      const color = intensityColor(activeColor, normalized);
-      const baseOpacity = 0.25 + (normalized / 100) * 0.55;
+      const tt = heatT(cell.probability, probRange.min, probRange.span);
+      const color = heatColor(heatPalette, activeColor, tt);
+      const baseOpacity = 0.30 + tt * 0.60;
 
       return {
         id: cell.id,
         bands: [
-          { path: offsetPolyline(cell.path, -riverWidthM), weight: 10, opacity: baseOpacity * profile.bank },
-          { path: offsetPolyline(cell.path, -riverWidthM * 0.5), weight: 12, opacity: baseOpacity * profile.midBank },
-          { path: cell.path, weight: 14, opacity: baseOpacity * profile.center },
-          { path: offsetPolyline(cell.path, riverWidthM * 0.5), weight: 12, opacity: baseOpacity * profile.midBank },
-          { path: offsetPolyline(cell.path, riverWidthM), weight: 10, opacity: baseOpacity * profile.bank }
+          // halo largo e bem fraco → brilho suave em vez de faixas chapadas
+          { path: cell.path, weight: 28, opacity: baseOpacity * 0.16 },
+          { path: offsetPolyline(cell.path, -riverWidthM), weight: 9, opacity: baseOpacity * profile.bank },
+          { path: offsetPolyline(cell.path, -riverWidthM * 0.5), weight: 11, opacity: baseOpacity * profile.midBank },
+          { path: cell.path, weight: 13, opacity: baseOpacity * profile.center },
+          { path: offsetPolyline(cell.path, riverWidthM * 0.5), weight: 11, opacity: baseOpacity * profile.midBank },
+          { path: offsetPolyline(cell.path, riverWidthM), weight: 9, opacity: baseOpacity * profile.bank }
         ],
         color
       };
     });
-  }, [scoredSegments, selectedSpecies, probRange, activeColor]);
+  }, [scoredSegments, selectedSpecies, probRange, activeColor, heatPalette]);
 
   const tributaryBands = useMemo(() => {
     if (!heatmapActive || scoredTributarySegments.length === 0) return [];
@@ -5563,24 +5612,33 @@ function App() {
     const allProbs = scoredTributarySegments.map(s => s.probability);
     const minP = Math.min(...allProbs);
     const spanP = (Math.max(...allProbs) - minP) || 1;
-    return scoredTributarySegments.map((seg) => {
-      const normalized = (seg.probability - minP) / spanP * 100;
-      const color = intensityColor(activeColor, normalized);
-      const baseOpacity = 0.25 + (normalized / 100) * 0.55;
+    // Teto de segurança: selecionar uma bacia inteira do RS pode gerar dezenas de milhares
+    // de segmentos (×6 polylines cada). Acima do teto, renderiza só os de maior probabilidade
+    // (que é o que o heatmap quer destacar) para não travar o navegador.
+    const HEATMAP_BAND_CAP = 2500;
+    const segsToRender = scoredTributarySegments.length > HEATMAP_BAND_CAP
+      ? [...scoredTributarySegments].sort((a, b) => b.probability - a.probability).slice(0, HEATMAP_BAND_CAP)
+      : scoredTributarySegments;
+    return segsToRender.map((seg) => {
+      const tt = heatT(seg.probability, minP, spanP);
+      const color = heatColor(heatPalette, activeColor, tt);
+      const baseOpacity = 0.30 + tt * 0.60;
       const w = 30; // afluentes são mais estreitos que o rio principal
+      const corePath = seg.path.length >= 2 ? seg.path : [seg.center, seg.center];
       return {
         id: seg.id, color,
         popup: { name: seg.tributaryName, probability: seg.probability, seg },
         bands: [
-          { path: offsetPolyline(seg.path, -w), weight: 7, opacity: baseOpacity * profile.bank },
-          { path: offsetPolyline(seg.path, -w * 0.5), weight: 9, opacity: baseOpacity * profile.midBank },
-          { path: seg.path.length >= 2 ? seg.path : [seg.center, seg.center], weight: 10, opacity: baseOpacity * profile.center },
-          { path: offsetPolyline(seg.path, w * 0.5), weight: 9, opacity: baseOpacity * profile.midBank },
-          { path: offsetPolyline(seg.path, w), weight: 7, opacity: baseOpacity * profile.bank },
+          { path: corePath, weight: 18, opacity: baseOpacity * 0.16 }, // halo glow
+          { path: offsetPolyline(seg.path, -w), weight: 6, opacity: baseOpacity * profile.bank },
+          { path: offsetPolyline(seg.path, -w * 0.5), weight: 8, opacity: baseOpacity * profile.midBank },
+          { path: corePath, weight: 10, opacity: baseOpacity * profile.center, core: true },
+          { path: offsetPolyline(seg.path, w * 0.5), weight: 8, opacity: baseOpacity * profile.midBank },
+          { path: offsetPolyline(seg.path, w), weight: 6, opacity: baseOpacity * profile.bank },
         ],
       };
     });
-  }, [scoredTributarySegments, selectedSpecies, activeColor, heatmapActive]);
+  }, [scoredTributarySegments, selectedSpecies, activeColor, heatmapActive, heatPalette]);
 
   const extraRiverBands = useMemo(() => {
     if (!heatmapActive || scoredExtraRiverSegments.length === 0) return [];
@@ -5589,23 +5647,25 @@ function App() {
     const minP = Math.min(...allProbs);
     const spanP = (Math.max(...allProbs) - minP) || 1;
     return scoredExtraRiverSegments.map((seg) => {
-      const normalized = (seg.probability - minP) / spanP * 100;
-      const color = intensityColor(activeColor, normalized);
-      const baseOpacity = 0.25 + (normalized / 100) * 0.55;
+      const tt = heatT(seg.probability, minP, spanP);
+      const color = heatColor(heatPalette, activeColor, tt);
+      const baseOpacity = 0.30 + tt * 0.60;
       const w = 50;
+      const corePath = seg.path.length >= 2 ? seg.path : [seg.center, seg.center];
       return {
         id: seg.id, color,
         popup: { name: seg.riverName, probability: seg.probability },
         bands: [
-          { path: offsetPolyline(seg.path, -w), weight: 9, opacity: baseOpacity * profile.bank },
-          { path: offsetPolyline(seg.path, -w * 0.5), weight: 11, opacity: baseOpacity * profile.midBank },
-          { path: seg.path.length >= 2 ? seg.path : [seg.center, seg.center], weight: 13, opacity: baseOpacity * profile.center },
-          { path: offsetPolyline(seg.path, w * 0.5), weight: 11, opacity: baseOpacity * profile.midBank },
-          { path: offsetPolyline(seg.path, w), weight: 9, opacity: baseOpacity * profile.bank },
+          { path: corePath, weight: 30, opacity: baseOpacity * 0.16 }, // halo glow
+          { path: offsetPolyline(seg.path, -w), weight: 8, opacity: baseOpacity * profile.bank },
+          { path: offsetPolyline(seg.path, -w * 0.5), weight: 10, opacity: baseOpacity * profile.midBank },
+          { path: corePath, weight: 12, opacity: baseOpacity * profile.center, core: true },
+          { path: offsetPolyline(seg.path, w * 0.5), weight: 10, opacity: baseOpacity * profile.midBank },
+          { path: offsetPolyline(seg.path, w), weight: 8, opacity: baseOpacity * profile.bank },
         ],
       };
     });
-  }, [scoredExtraRiverSegments, selectedSpecies, activeColor, heatmapActive]);
+  }, [scoredExtraRiverSegments, selectedSpecies, activeColor, heatmapActive, heatPalette]);
 
   const heatmapData = useMemo(() => {
     if (riverSegments.length === 0) return [];
@@ -6791,7 +6851,7 @@ function App() {
           {heatmapActive && extraRiverBands.map((seg) => (
             <React.Fragment key={`erb-${seg.id}`}>
               {seg.bands.map((band, bi) => (
-                bi === 2
+                band.core
                   ? <Polyline key={bi} positions={band.path} pathOptions={{ color: seg.color, weight: band.weight, opacity: band.opacity, lineCap: 'round', lineJoin: 'round' }}>
                       <Popup>
                         <div style={{minWidth: 180, maxWidth: 220}}>
@@ -6807,7 +6867,7 @@ function App() {
           {heatmapActive && tributaryBands.map((seg) => (
             <React.Fragment key={`tb-${seg.id}`}>
               {seg.bands.map((band, bi) => (
-                bi === 2
+                band.core
                   ? <Polyline key={bi} positions={band.path} pathOptions={{ color: seg.color, weight: band.weight, opacity: band.opacity, lineCap: 'round', lineJoin: 'round' }}>
                       <Popup>
                         <div style={{minWidth: 180, maxWidth: 220}}>
@@ -6995,9 +7055,30 @@ function App() {
               <div style={{ fontSize:'0.58rem', color:'#64748b', marginTop:4 }}>linha mais grossa/clara = maior porte</div>
             </div>
           )}
+          {heatmapActive && (
+            <div style={{ position:'absolute', left:10, bottom: riverColorBy === 'order' ? (envLayer ? 150 : 92) : (envLayer ? 84 : 26), zIndex:1000, background:'rgba(15,23,42,0.88)', border:'1px solid rgba(255,255,255,0.12)', borderRadius:8, padding:'7px 10px' }}>
+              <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:10, marginBottom:5 }}>
+                <span style={{ fontSize:'0.7rem', color:'#cbd5e1', fontWeight:600 }}>🎣 Probabilidade de captura</span>
+                <div style={{ display:'flex', gap:0, border:'1px solid rgba(255,255,255,0.16)', borderRadius:6, overflow:'hidden' }}>
+                  {[['thermal','Térmica'],['species','Espécie']].map(([val,label]) => (
+                    <button key={val} type="button" onClick={() => setHeatPalette(val)}
+                      style={{ padding:'2px 7px', fontSize:'0.6rem', fontWeight:700, cursor:'pointer', border:'none',
+                        background: heatPalette === val ? 'rgba(56,189,248,0.25)' : 'transparent',
+                        color: heatPalette === val ? '#7dd3fc' : '#94a3b8' }}>{label}</button>
+                  ))}
+                </div>
+              </div>
+              <div style={{ display:'flex', alignItems:'center', gap:6 }}>
+                <span style={{ fontSize:'0.62rem', color:'#94a3b8' }}>baixa</span>
+                <div style={{ width:130, height:10, borderRadius:5, background: heatGradientCss(heatPalette, activeColor) }} />
+                <span style={{ fontSize:'0.62rem', color:'#94a3b8' }}>alta</span>
+              </div>
+            </div>
+          )}
           <MapLegend
             heatmapActive={heatmapActive}
             activeColor={activeColor}
+            heatGradient={heatGradientCss(heatPalette, activeColor)}
             showSnapAreas={showSnapAreas}
             showWatercourses={showWatercourses}
             showFishingSpots={showFishingSpots}
