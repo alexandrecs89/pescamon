@@ -275,6 +275,7 @@ Um pilar do projeto é ajudar o pescador a pescar **dentro da lei**. As camadas 
 - LSTM inativo por falta de volume de dados (threshold: ≥30 capturas/espécie).
 - Hidrografia oficial disponível para **RS**, **SC** e **UY**; demais estados/regiões seguem o pipeline de expansão (ver `docs/EXPANSAO-ESTADOS.md`).
 - Os scripts de hidrografia por estado (`build_rs_hydrography.mjs`, `build_sc_hydrography.mjs`) ainda repetem código — falta unificá-los num único script parametrizado por UF.
+- **SC: campo `order` ainda invertido nos dados** — o script já grava Strahler, mas os `trib_sc_*.json` não foram regenerados (o rebuild default gera 168k trechos vs 46k commitados; falta rodar com os limiares originais `SC_URU`/`SC_ATL`). Até lá, o Porte/Vazão em SC fica com a semântica antiga.
 - Espécies de SC usam o catálogo compartilhado da Bacia do Uruguai; um refinamento por curso (litoral vs. interior) fica como melhoria futura.
 - ~~Bug: troca muito rápida de país somava trechos de duas regiões~~ — **corrigido** (loads de hidrografia concorrentes agora abortam por token de geração).
 
@@ -365,13 +366,14 @@ No Netlify: Site settings → Environment variables → adicionar as mesmas duas
 #### 🥇 Alta prioridade — diferencial visual (estilo Windy, sobre o nosso heatmap)
 
 - [x] **Camadas ambientais no mapa** (estilo Windy): seletor "Ambiente" com **Temp. água · Vento · Pressão** — campo contínuo por gradiente radial (`EnvCanvasLayer`, config-driven em `ENV_LAYERS`), legenda kind-aware; o vento ainda desenha **setas de direção**. Grade Open-Meteo (1 chamada multi-coordenada) recortada à fronteira; não-interativas (rios seguem clicáveis por cima).
-- [x] **Vazão/porte como coloração da rede**: modo `riverColorBy='order'` colore os trechos por ordem do rio (BHO) — cabeceiras claras/finas → troncos azul-escuro/grossos. (Vazão dinâmica por trecho via GloFAS continua futura.)
+- [x] **Porte como coloração da rede**: modo `riverColorBy='order'` colore por **ordem de Strahler** (`nustrahler`) — cabeceiras finas/apagadas → troncos grossos/vivos. (Bug corrigido: o campo gravava `nuordemcda`, hierárquico invertido, que destacava cabeceiras como troncos; ver "campo order = Strahler" abaixo.)
+- [x] **Legenda do heatmap país-ciente (bacias)**: a seção "Bacias Hidrográficas" do `MapLegend` agora vem de `BASINS_BY_COUNTRY[selectedCountry]` (RS mostra Uruguai/Jacuí/Mirim/Vertente). _Resta_ tornar país-ciente a seção de áreas protegidas (SNAP→CNUC).
 - [x] **Slider de tempo (camadas ambientais)**: `fetchEnvGrid` busca a série horária 48h; slider na legenda varre o forecast recolorindo o campo (e as setas de vento). _Estendido também ao heatmap de espécie (ver abaixo)._
 - [x] **Timeline de "bite time"** (`BiteTimeTimeline`): atividade horária 48h por local/espécie (crepúsculo + lua + pressão + vento + nuvens), com melhores janelas e marcador "agora".
 - [x] **Vento animado (partículas, estilo Windy)**: `WindParticlesLayer` adveca partículas pelo campo de vento (interpolado em pixels) com rastro que desvanece, por cima do campo de cor. Substitui as setas estáticas. (Animação só roda em navegador visível — o preview headless pausa o `requestAnimationFrame`.)
 - [x] **Slider de tempo no heatmap de espécie** (re-score por hora): toggle "⏱ Hora" na legenda do heatmap busca a série climática 48h horária (`fetchHeatHourly`, centro da região) e re-scora a probabilidade hora a hora; `effectiveClimate` alimenta os três memos de scoring, com `useDeferredValue` para arraste fluido. Funciona em RS, UY e rios extras.
-- [x] **Legenda do heatmap (cores)**: o `MapLegend` agora reflete o gradiente real da paleta (antes mostrava verde→vermelho fixo que não batia com o render). Toggle Térmica/Espécie na legenda do mapa. _Resta_ tornar o `const BASINS` do `MapLegend` país-ciente (ainda fixo em UY).
-- [ ] **Vazão dinâmica (GloFAS)** por trecho (a coloração atual é por ordem/porte, estrutural).
+- [x] **Legenda do heatmap (cores)**: o `MapLegend` agora reflete o gradiente real da paleta (antes mostrava verde→vermelho fixo que não batia com o render). Toggle Térmica/Espécie na legenda do mapa.
+- [x] **Vazão dinâmica (GloFAS)** nos troncos: modo `riverColorBy='discharge'` (menu "💧 Vazão (GloFAS)") colore os rios-tronco (Strahler ≥ 6) pela **anomalia atual÷média do mês** do GloFAS/Open-Meteo Flood (vermelho=seca, ciano=normal, azul=cheia), com a malha menor esmaecida. Snap à célula-canal de ~5 km por busca do ponto de maior vazão ao longo do rio (`fetchRiverDischarges`). Verificado: Uruguai 896, Jacuí 386, Pelotas 325 m³/s. _Cabeceiras/sangas (~80% dos trechos) não têm série GloFAS — por isso é só nos troncos._
 
 #### 🥇 Alta prioridade — escalar territorialmente
 
@@ -397,6 +399,8 @@ No Netlify: Site settings → Environment variables → adicionar as mesmas duas
 
 #### ✅ Concluído recentemente (jun/2026)
 
+- [x] **Campo `order` = Strahler (correção)**: `build_rs/sc_hydrography.mjs` passou a gravar `nustrahler` (tronco = ordem alta) em vez de `nuordemcda` (hierárquico invertido). Conserta o Porte (destacava cabeceiras como troncos) e destrava o GloFAS. RS regenerado (só o campo `order`, geometria idêntica); **SC pendente** (rebuild com os limiares originais)
+- [x] **Vazão dinâmica GloFAS** nos troncos (anomalia atual÷média; snap à célula-canal) + **legenda país-ciente das bacias** + **slider de tempo no heatmap**
 - [x] **Heatmap de espécies — upgrade visual + RS**: duas paletas alternáveis (Térmica/Espécie) com glow e normalização relativa+absoluta; legenda alinhada à paleta; **passou a renderizar nos rios do RS** (corrigido o memo preso por mutação in-place do `_trib.data` + match de ids compostos BR; teto de 2500 segmentos)
 - [x] **Vento animado (partículas estilo Windy)**: `WindParticlesLayer` advecta partículas pelo campo de vento, substituindo as setas estáticas
 - [x] **Porte/vazão (coloração por ordem)**: escala remapeada para a faixa 2–7 com rampa multi-matiz e largura/opacidade por ordem; seleção de bacias persistida (não reativa todas ao desligar)
