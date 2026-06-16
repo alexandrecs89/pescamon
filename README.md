@@ -40,7 +40,7 @@ A regra do projeto é **sempre usar os dados oficiais do governo local**. Quando
 | Região | Fonte oficial | Conteúdo gerado |
 |---|---|---|
 | **Rio Grande do Sul (BR-RS)** | ANA — BHO 2017 (geopackage) + fronteira IBGE (codarea 43) | `public/trib_rs_*.json` (43.522 trechos em 4 bacias: Uruguai, Jacuí, Mirim, Vertente Atlântica), `public/rs_boundary.json` |
-| **Santa Catarina (BR-SC)** | ANA — BHO 2017 + fronteira IBGE (codarea 42) | `public/trib_sc_*.json` (45.951 trechos em 2 bacias: Uruguai interior, Vertente Atlântica; simplificados Douglas-Peucker), `public/sc_boundary.json` |
+| **Santa Catarina (BR-SC)** | ANA — BHO 2017 + fronteira IBGE (codarea 42) | `public/trib_sc_*.json` (168.433 trechos em 2 bacias: Uruguai interior, Vertente Atlântica; simplificados Douglas-Peucker), `public/sc_boundary.json` |
 | **Uruguai (UY)** | DINAGUA (WFS — cursos `c257` + cuencas Nível 1 `c097`) | `public/trib_uy_*.json` (6 bacias), `public/uy_boundary.json` |
 | **Brasil (silhueta + 27 estados)** | IBGE malhas v3 | `public/br_boundary.json`, `public/br_states.json` (seletor geográfico) |
 | **Santa Lucía (legado MVP)** | OSM relation 2736318 / Overpass | `public/export.geojson`, `public/tributarios.geojson` (~614 afluentes) |
@@ -275,7 +275,6 @@ Um pilar do projeto é ajudar o pescador a pescar **dentro da lei**. As camadas 
 - LSTM inativo por falta de volume de dados (threshold: ≥30 capturas/espécie).
 - Hidrografia oficial disponível para **RS**, **SC** e **UY**; demais estados/regiões seguem o pipeline de expansão (ver `docs/EXPANSAO-ESTADOS.md`).
 - Os scripts de hidrografia por estado (`build_rs_hydrography.mjs`, `build_sc_hydrography.mjs`) ainda repetem código — falta unificá-los num único script parametrizado por UF.
-- **SC: campo `order` ainda invertido nos dados** — o script já grava Strahler, mas os `trib_sc_*.json` não foram regenerados (o rebuild default gera 168k trechos vs 46k commitados; falta rodar com os limiares originais `SC_URU`/`SC_ATL`). Até lá, o Porte/Vazão em SC fica com a semântica antiga.
 - Espécies de SC usam o catálogo compartilhado da Bacia do Uruguai; um refinamento por curso (litoral vs. interior) fica como melhoria futura.
 - ~~Bug: troca muito rápida de país somava trechos de duas regiões~~ — **corrigido** (loads de hidrografia concorrentes agora abortam por token de geração).
 
@@ -317,7 +316,7 @@ No Netlify: Site settings → Environment variables → adicionar as mesmas duas
 - Build Vite com code splitting (~906 kB JS, ~120 kB CSS)
 - PWA com service worker e cache offline
 - **Hidrografia oficial RS** (ANA BHO 2017 — 43.522 trechos em 4 bacias, recortados à fronteira IBGE) com render estável (pool de canvas por bacia)
-- **Hidrografia oficial SC** (ANA BHO 2017 — 45.951 trechos em 2 bacias: Uruguai interior + Vertente Atlântica, simplificados Douglas-Peucker)
+- **Hidrografia oficial SC** (ANA BHO 2017 — 168.433 trechos em 2 bacias: Uruguai interior + Vertente Atlântica, simplificados Douglas-Peucker)
 - **Hidrografia oficial UY** (DINAGUA — cursos + cuencas Nível 1, 6 bacias) substituindo o MVP do Santa Lucía
 - **Seletor geográfico no mapa** (mundo → país → estado): Brasil/Uruguai clicáveis; 27 estados do Brasil desenhados (RS e SC clicáveis); lembra a última região
 - **Conformidade legal ciente de região**: 101 UCs CNUC (RS) + 179 UCs CNUC (SC) + 21 áreas SNAP (UY); vedas/defeso por região (piracema IBAMA na Bacia do Rio Uruguai = RS+SC; defeso Lagoa dos Patos e safra da tainha)
@@ -399,12 +398,12 @@ No Netlify: Site settings → Environment variables → adicionar as mesmas duas
 
 #### ✅ Concluído recentemente (jun/2026)
 
-- [x] **Campo `order` = Strahler (correção)**: `build_rs/sc_hydrography.mjs` passou a gravar `nustrahler` (tronco = ordem alta) em vez de `nuordemcda` (hierárquico invertido). Conserta o Porte (destacava cabeceiras como troncos) e destrava o GloFAS. RS regenerado (só o campo `order`, geometria idêntica); **SC pendente** (rebuild com os limiares originais)
+- [x] **Campo `order` = Strahler (correção)**: `build_rs/sc_hydrography.mjs` passou a gravar `nustrahler` (tronco = ordem alta) em vez de `nuordemcda` (hierárquico invertido). Conserta o Porte (destacava cabeceiras como troncos) e destrava o GloFAS. **RS e SC regenerados** (só o campo `order`, geometria idêntica; Uruguai/Iguaçu maxOrder 9, Pelotas/Canoas 8)
 - [x] **Vazão dinâmica GloFAS** nos troncos (anomalia atual÷média; snap à célula-canal) + **legenda país-ciente das bacias** + **slider de tempo no heatmap**
 - [x] **Heatmap de espécies — upgrade visual + RS**: duas paletas alternáveis (Térmica/Espécie) com glow e normalização relativa+absoluta; legenda alinhada à paleta; **passou a renderizar nos rios do RS** (corrigido o memo preso por mutação in-place do `_trib.data` + match de ids compostos BR; teto de 2500 segmentos)
 - [x] **Vento animado (partículas estilo Windy)**: `WindParticlesLayer` advecta partículas pelo campo de vento, substituindo as setas estáticas
 - [x] **Porte/vazão (coloração por ordem)**: escala remapeada para a faixa 2–7 com rampa multi-matiz e largura/opacidade por ordem; seleção de bacias persistida (não reativa todas ao desligar)
-- [x] **Expansão Santa Catarina (BR-SC)**: hidrografia oficial (45.951 trechos, 2 bacias), 179 UCs CNUC, legislação (piracema + tainha) e espécies; clicável no seletor geográfico
+- [x] **Expansão Santa Catarina (BR-SC)**: hidrografia oficial (168.433 trechos, 2 bacias), 179 UCs CNUC, legislação (piracema + tainha) e espécies; clicável no seletor geográfico
 - [x] **Hidrografia oficial RS** (ANA BHO 2017, 43.522 trechos, 4 bacias, recorte IBGE) + render por bacia
 - [x] **Hidrografia oficial UY** (DINAGUA, 6 bacias) substituindo o MVP do Santa Lucía
 - [x] **Áreas protegidas RS** (101 UCs CNUC) + **legislação de pesca ciente de região**
