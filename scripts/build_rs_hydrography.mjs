@@ -204,7 +204,10 @@ function build(db) {
       name: r.nm || 'Sem nome',
       type: 'river',
       regionId: `${basin}_BR-RS`,
-      order: r.ord || null,
+      // Ordem de STRAHLER (tronco = ordem alta). Antes gravava nuordemcda (r.ord), que é
+      // hierárquico INVERTIDO (rio principal = baixo) — deixava o porte/vazão e o GloFAS
+      // pegando cabeceiras como "troncos". nustrahler (r.st) é o porte real do rio.
+      order: r.st || null,
       paths: insidePaths,
     });
     kept++;

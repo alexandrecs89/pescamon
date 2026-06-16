@@ -215,7 +215,8 @@ function build(db) {
       name: r.nm || 'Sem nome',
       type: 'river',
       regionId: `${basin}_BR-SC`,
-      order: r.ord || null,
+      // Ordem de STRAHLER (tronco = ordem alta). Antes gravava nuordemcda (invertido).
+      order: r.st || null,
       paths: insidePaths,
     });
     kept++;
