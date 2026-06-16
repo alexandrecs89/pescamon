@@ -4440,6 +4440,10 @@ function App() {
   const [heatTime, setHeatTime] = useState(0);          // índice da hora no slider
   const [heatTimeOn, setHeatTimeOn] = useState(false);  // modo tempo ligado?
   const [heatHourlyLoading, setHeatHourlyLoading] = useState(false);
+  // Vazão dinâmica GloFAS (modo riverColorBy='discharge'): { riverKey: { discharge, mean, ratio } }
+  const [dischargeByRiver, setDischargeByRiver] = useState({});
+  const [dischargeLoading, setDischargeLoading] = useState(false);
+  const dischargeCacheRef = useRef({}); // country -> mapa (não refaz a busca por país)
   const [spotModal, setSpotModal] = useState(null); // null | { lat, lng } | { spot } (view mode)
   const [spotForm, setSpotForm] = useState({ name: '', description: '', access_type: 'bank', species_ids: [], species_names: [] });
   const [spotSaving, setSpotSaving] = useState(false);
@@ -4474,6 +4478,32 @@ function App() {
       .finally(() => { if (!cancelled) setHeatHourlyLoading(false); });
     return () => { cancelled = true; };
   }, [heatTimeOn, selectedCountry]);
+  // Rios-tronco (ordem alta) agrupados, com pontos amostra p/ snap GloFAS. Só no modo vazão.
+  const dischargeRivers = useMemo(() => {
+    if (riverColorBy !== 'discharge' || !tributaryLines.length) return [];
+    const groups = new Map();
+    for (const t of tributaryLines) {
+      if ((t.order ?? 0) < 6) continue; // só troncos: GloFAS não resolve cabeceiras
+      const key = riverGroupKey(t.name, t.regionId, t.id);
+      let g = groups.get(key);
+      if (!g) { g = { key, pts: [] }; groups.set(key, g); }
+      for (const path of t.paths) { const mid = path[Math.floor(path.length / 2)]; if (mid) g.pts.push(mid); }
+    }
+    const pick = (a, n) => (a.length <= n ? a : Array.from({ length: n }, (_, i) => a[Math.round(i * (a.length - 1) / (n - 1))]));
+    return [...groups.values()].map(g => ({ key: g.key, pts: pick(g.pts, 4) }));
+  }, [riverColorBy, tributaryLines]);
+  // Busca a vazão GloFAS quando o modo vazão é ligado (cacheada por país).
+  useEffect(() => {
+    if (riverColorBy !== 'discharge' || !dischargeRivers.length) return;
+    if (dischargeCacheRef.current[selectedCountry]) { setDischargeByRiver(dischargeCacheRef.current[selectedCountry]); return; }
+    let cancelled = false;
+    setDischargeLoading(true);
+    fetchRiverDischarges(dischargeRivers)
+      .then(map => { if (!cancelled) { dischargeCacheRef.current[selectedCountry] = map; setDischargeByRiver(map); } })
+      .catch(() => { if (!cancelled) setDischargeByRiver({}); })
+      .finally(() => { if (!cancelled) setDischargeLoading(false); });
+    return () => { cancelled = true; };
+  }, [riverColorBy, dischargeRivers, selectedCountry]);
   // Seletor geográfico (mapa país→estado). Abre só quando não há região salva.
   const [pickerOpen, setPickerOpen] = useState(() => !loadSavedCountry());
   const handlePickRegion = useCallback((regionId) => {
@@ -6456,11 +6486,11 @@ function App() {
             <div style={{ position: 'relative' }}>
               <button
                 type="button"
-                className={`map-toggle-btn${(envLayer || riverColorBy === 'order') ? ' active' : ''}`}
+                className={`map-toggle-btn${(envLayer || riverColorBy !== 'basin') ? ' active' : ''}`}
                 onClick={() => setEnvMenuOpen((v) => !v)}
                 title="Camadas ambientais (Open-Meteo)"
               >
-                <ThermometerSun size={13} /> {envLayer ? `${ENV_LAYERS[envLayer].emoji} ${ENV_LAYERS[envLayer].label}` : (riverColorBy === 'order' ? '🌊 Porte' : 'Ambiente')}{envLoading ? '…' : ''} <ChevronDown size={11} style={{ opacity: 0.6 }} />
+                <ThermometerSun size={13} /> {envLayer ? `${ENV_LAYERS[envLayer].emoji} ${ENV_LAYERS[envLayer].label}` : (riverColorBy === 'order' ? '🌊 Porte' : riverColorBy === 'discharge' ? `💧 Vazão${dischargeLoading ? '…' : ''}` : 'Ambiente')}{envLoading ? '…' : ''} <ChevronDown size={11} style={{ opacity: 0.6 }} />
               </button>
               {envMenuOpen && (
                 <div style={{ position: 'absolute', top: 'calc(100% + 4px)', left: 0, zIndex: 1500, background: 'var(--bg-surface)', border: '1px solid var(--border-faint2)', borderRadius: 8, overflow: 'hidden', boxShadow: 'var(--shadow-modal)', minWidth: 160 }}>
@@ -6479,7 +6509,12 @@ function App() {
                   <button type="button"
                     onClick={() => { setRiverColorBy(v => v === 'order' ? 'basin' : 'order'); setEnvMenuOpen(false); }}
                     style={{ width: '100%', textAlign: 'left', padding: '8px 11px', background: riverColorBy === 'order' ? 'rgba(59,130,246,0.16)' : 'transparent', border: 'none', color: riverColorBy === 'order' ? '#60a5fa' : 'var(--text-primary)', cursor: 'pointer', fontSize: '0.8rem', fontWeight: riverColorBy === 'order' ? 700 : 400 }}>
-                    🌊 Porte/vazão {riverColorBy === 'order' ? '✓' : ''}
+                    🌊 Porte (ordem) {riverColorBy === 'order' ? '✓' : ''}
+                  </button>
+                  <button type="button"
+                    onClick={() => { setRiverColorBy(v => v === 'discharge' ? 'basin' : 'discharge'); setEnvMenuOpen(false); }}
+                    style={{ width: '100%', textAlign: 'left', padding: '8px 11px', background: riverColorBy === 'discharge' ? 'rgba(59,130,246,0.16)' : 'transparent', border: 'none', color: riverColorBy === 'discharge' ? '#60a5fa' : 'var(--text-primary)', cursor: 'pointer', fontSize: '0.8rem', fontWeight: riverColorBy === 'discharge' ? 700 : 400 }}>
+                    💧 Vazão (GloFAS) {riverColorBy === 'discharge' ? '✓' : ''}
                   </button>
                 </div>
               )}
@@ -6708,6 +6743,7 @@ function App() {
             activeBasins={activeBasins}
             selectedCountry={selectedCountry}
             colorBy={riverColorBy}
+            dischargeByRiver={dischargeByRiver}
           />}
 
           {/* Rios e lagoas extras (overlays herói legados) — desativados: a rede oficial
@@ -7087,6 +7123,17 @@ function App() {
                 <span style={{ fontSize:'0.62rem', color:'#94a3b8' }}>tronco</span>
               </div>
               <div style={{ fontSize:'0.58rem', color:'#64748b', marginTop:4 }}>linha mais grossa/clara = maior porte</div>
+            </div>
+          )}
+          {riverColorBy === 'discharge' && (
+            <div style={{ position:'absolute', left:10, bottom: envLayer ? 84 : 26, zIndex:1000, background:'rgba(15,23,42,0.86)', border:'1px solid rgba(255,255,255,0.12)', borderRadius:8, padding:'7px 10px', pointerEvents:'none' }}>
+              <div style={{ fontSize:'0.7rem', color:'#cbd5e1', marginBottom:5, fontWeight:600 }}>💧 Vazão dos troncos (GloFAS){dischargeLoading ? ' · carregando…' : ''}</div>
+              <div style={{ display:'flex', alignItems:'center', gap:6 }}>
+                <span style={{ fontSize:'0.62rem', color:'#94a3b8' }}>seca</span>
+                <div style={{ width:120, height:10, borderRadius:5, background:'linear-gradient(90deg, rgb(239,68,68), rgb(249,115,22), rgb(34,211,238), rgb(59,130,246), rgb(37,99,235))' }} />
+                <span style={{ fontSize:'0.62rem', color:'#94a3b8' }}>cheia</span>
+              </div>
+              <div style={{ fontSize:'0.58rem', color:'#64748b', marginTop:4 }}>cor = vazão atual ÷ média do mês · só rios grandes</div>
             </div>
           )}
           {heatmapActive && (
@@ -8456,6 +8503,53 @@ function BiteTimeTimeline({ lat, lon, locLabel, pressureSensitivity = 0.5 }) {
 // Busca uma grade HORÁRIA (48h) da camada `kind` sobre o bbox do país, recortada à
 // fronteira oficial. Uma única chamada Open-Meteo (multi-coordenada). Cada ponto traz
 // uma série temporal (values[] e, no vento, dirs[]) para o slider de tempo.
+// Chave estável de "rio" (agrupa trechos por nome + bacia base, sem sufixo de país).
+// Trechos sem nome ficam isolados pelo id. Usada no modo de vazão GloFAS (fetch + render).
+function riverGroupKey(name, regionId, id) {
+  const nm = (name || '').trim();
+  if (!nm || /^sem nome$/i.test(nm)) return `__id_${id}`;
+  const base = (regionId || '').replace(/_(UY|AR|BR(-[A-Z]{2})?)$/, '');
+  return `${nm}|${base}`;
+}
+
+// Cor por anomalia de vazão (razão atual/média do mês): vermelho=muito abaixo do normal,
+// ciano=normal, azul=acima (cheia). É o diferencial dinâmico que o GloFAS adiciona ao porte.
+const _DISCHARGE_STOPS = [[0.3,[239,68,68]],[0.7,[249,115,22]],[1.0,[34,211,238]],[1.6,[59,130,246]],[2.6,[37,99,235]]];
+function dischargeColor(ratio) { const [r,g,b] = _envColor(_DISCHARGE_STOPS, ratio); return `rgb(${r},${g},${b})`; }
+
+// Busca vazão GloFAS (Open-Meteo Flood) para os rios-tronco. Para cada rio testa vários
+// pontos ao longo do traçado e fica com o de MAIOR vazão (snap à célula-canal de ~5 km;
+// pontos fora do canal retornam ~0). Retorna { key: { discharge, mean, ratio } } só para
+// rios com canal de fato (>= 5 m³/s). past_days dá a média do mês p/ a anomalia.
+async function fetchRiverDischarges(rivers) {
+  const flat = [];
+  rivers.forEach((r, ri) => r.pts.forEach(p => flat.push({ ri, lat: p[0], lon: p[1] })));
+  if (!flat.length) return {};
+  const best = rivers.map(() => ({ disc: -1, mean: 1 }));
+  const CHUNK = 100;
+  for (let i = 0; i < flat.length; i += CHUNK) {
+    const slice = flat.slice(i, i + CHUNK);
+    const url = `https://flood-api.open-meteo.com/v1/flood?latitude=${slice.map(s=>s.lat).join(',')}&longitude=${slice.map(s=>s.lon).join(',')}&daily=river_discharge&past_days=31&forecast_days=1&timezone=auto`;
+    let data;
+    try { const res = await fetch(url); if (!res.ok) continue; data = await res.json(); } catch { continue; }
+    const arr = Array.isArray(data) ? data : [data];
+    for (let k = 0; k < slice.length; k++) {
+      const series = (arr[k]?.daily?.river_discharge || []).filter(v => v != null);
+      if (!series.length) continue;
+      const current = series[series.length - 2] ?? series[series.length - 1]; // último dia passado
+      const mean = series.reduce((a, b) => a + b, 0) / series.length;
+      const ri = slice[k].ri;
+      if (current > best[ri].disc) best[ri] = { disc: current, mean: mean || 1 };
+    }
+  }
+  const out = {};
+  rivers.forEach((r, ri) => {
+    const b = best[ri];
+    if (b.disc >= 5) out[r.key] = { discharge: +b.disc.toFixed(1), mean: +b.mean.toFixed(1), ratio: b.mean > 0 ? b.disc / b.mean : 1 };
+  });
+  return out;
+}
+
 // Série climática horária (48h) no centro da região — alimenta o slider de tempo do
 // heatmap, permitindo re-scorar a probabilidade hora a hora. Cada item é compatível com
 // um cenário de `climateScenarios` (campos lidos por calculateProbability/pressureBonus).
@@ -8665,7 +8759,7 @@ function WindParticlesLayer({ grid, timeIndex = 0 }) {
 }
 
 // Componente para mostrar todos os cursos d'água quando nenhum está selecionado
-function AllWatercourses({ tributaryLines, waterQualityData, species, occurrences, selectedWatercourseIds, santaLuciaGeometry, extraRivers = [], extraRiverGeometries = {}, activeBasins = new Set(), selectedCountry = 'UY', colorBy = 'basin' }) {
+function AllWatercourses({ tributaryLines, waterQualityData, species, occurrences, selectedWatercourseIds, santaLuciaGeometry, extraRivers = [], extraRiverGeometries = {}, activeBasins = new Set(), selectedCountry = 'UY', colorBy = 'basin', dischargeByRiver = {} }) {
   const map = useMap();
   const [zoom, setZoom] = useState(map?.getZoom() || 11);
   const [hoveredId, setHoveredId] = useState(null);
@@ -8772,14 +8866,21 @@ function AllWatercourses({ tributaryLines, waterQualityData, species, occurrence
   const basinGroups = useMemo(() => {
     const groups = {};
     for (const t of simplifiedLines) {
-      const key = colorBy === 'order'
-        ? `ord-${Math.min(10, Math.max(1, Math.round(t.order || 1)))}`
-        : (t.regionId || 'santa_lucia');
+      let key;
+      if (colorBy === 'order') {
+        key = `ord-${Math.min(10, Math.max(1, Math.round(t.order || 1)))}`;
+      } else if (colorBy === 'discharge') {
+        // Troncos com vazão GloFAS → grupo por rio (disc-<key>); resto → fundo esmaecido.
+        const rk = riverGroupKey(t.name, t.regionId, t.id);
+        key = ((t.order ?? 0) >= 6 && dischargeByRiver[rk]) ? `disc-${rk}` : 'disc-minor';
+      } else {
+        key = (t.regionId || 'santa_lucia');
+      }
       const arr = (groups[key] || (groups[key] = []));
       for (const p of t.paths) arr.push(p);
     }
     return Object.entries(groups).map(([key, positions]) => ({ key, positions }));
-  }, [simplifiedLines, colorBy]);
+  }, [simplifiedLines, colorBy, dischargeByRiver]);
 
   // Se não há dados de tributários e geometria do Santa Lucía, não renderiza nada
   if ((!tributaryLines || tributaryLines.length === 0) && (!santaLuciaGeometry || santaLuciaGeometry.length === 0)) return null;
@@ -8890,14 +8991,29 @@ function AllWatercourses({ tributaryLines, waterQualityData, species, occurrence
       {/* Uma multi-polyline por grupo (bacia ou porte do rio); não-interativas */}
       {basinGroups.map(g => {
         const isOrder = colorBy === 'order' && g.key.startsWith('ord-');
-        const ord = isOrder ? +g.key.slice(4) : 0;
-        const color = isOrder ? _orderColor(ord) : (REGION_COLORS[g.key] || '#3b82f6');
-        // Porte: remapeia ordem p/ a faixa 2..7 (onde fica ~99% dos trechos) — assim as
-        // ordens médias 3-5 ganham espessuras/opacidades bem distintas; troncos grossos e
-        // opacos, cabeceiras finas e translúcidas.
-        const t = isOrder ? Math.min(1, Math.max(0, (ord - 2) / 5)) : 0;
-        const w = isOrder ? (0.4 + Math.pow(t, 1.6) * (lineWeight * 4)) : lineWeight;
-        const op = isOrder ? (0.4 + t * 0.55) : 0.7;
+        const isDisc = colorBy === 'discharge' && g.key.startsWith('disc-');
+        let color, w, op;
+        if (isDisc) {
+          if (g.key === 'disc-minor') {
+            // fundo esmaecido (cabeceiras/sem dado GloFAS) para os troncos se destacarem
+            color = '#475569'; w = Math.max(0.5, lineWeight * 0.5); op = 0.28;
+          } else {
+            const d = dischargeByRiver[g.key.slice(5)];
+            color = d ? dischargeColor(d.ratio) : '#3b82f6';
+            w = lineWeight * 2.6; op = 0.92; // troncos grossos e vivos (vazão dinâmica)
+          }
+        } else if (isOrder) {
+          const ord = +g.key.slice(4);
+          color = _orderColor(ord);
+          // Porte: remapeia ordem p/ a faixa 2..7 (onde fica ~99% dos trechos) — assim as
+          // ordens médias 3-5 ganham espessuras/opacidades bem distintas.
+          const t = Math.min(1, Math.max(0, (ord - 2) / 5));
+          w = 0.4 + Math.pow(t, 1.6) * (lineWeight * 4);
+          op = 0.4 + t * 0.55;
+        } else {
+          color = REGION_COLORS[g.key] || '#3b82f6';
+          w = lineWeight; op = 0.7;
+        }
         return (
           <BasinLayer
             key={`${g.key}-${selectedCountry}`}
