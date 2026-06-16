@@ -4678,7 +4678,7 @@ function App() {
   // Áreas de preservação carregadas por país (RS = UCs oficiais ICMBio; UY usa SNAP_AREAS
   // inline). Para uma região nova, basta gerar public/protected_areas_<uf>.json + a entrada aqui.
   useEffect(() => {
-    const files = { 'BR-RS': 'protected_areas_rs.json', 'BR-SC': 'protected_areas_sc.json' };
+    const files = { 'BR-RS': 'protected_areas_rs.json', 'BR-SC': 'protected_areas_sc.json', 'BR-PR': 'protected_areas_pr.json' };
     const file = files[selectedCountry];
     if (!file) { setProtectedAreas([]); return; }
     let cancelled = false;
