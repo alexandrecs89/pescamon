@@ -377,7 +377,7 @@ No Netlify: Site settings → Environment variables → adicionar as mesmas duas
 #### 🥇 Alta prioridade — escalar territorialmente
 
 - [ ] **Unificar os scripts de hidrografia num único `build_hydrography.mjs <uf>`** (`docs/EXPANSAO-ESTADOS.md` §8): hoje `build_rs_hydrography.mjs` e `build_sc_hydrography.mjs` repetem ~90% do código (mudam só bbox, bacias, `classifyTerminal` e `BASIN_MIN_STRAHLER`). Parametrizar evita duplicação no 3º estado. (Já feito: `build_protected_areas.mjs <uf>`, `build_sc_boundary.mjs`, e os branches do app passaram a usar `/^BR-/`.)
-- [~] **Paraná (BR-PR, codarea 41)**: ✅ fronteira (IBGE) + hidrografia (BHO, 67.825 trechos em 2 bacias: Paraná + Vertente Atlântica) + 108 UCs (CNUC) + clicável no seletor. _Pendente:_ legislação (vedas — piracema da Bacia do Paraná, requer pesquisa de portaria) + catálogo de espécies (regions += BR-PR).
+- [x] **Paraná (BR-PR, codarea 41)** — expansão completa: fronteira (IBGE) + hidrografia (BHO, 67.825 trechos em 2 bacias: Paraná + Vertente Atlântica) + 108 UCs (CNUC) + catálogo de espécies (regions += BR-PR) + legislação (piracema da Bacia do Paraná, ~nov–fev, IAT-PR/IBAMA) + clicável no seletor geográfico.
 - [ ] **Áreas protegidas do Uruguai no modelo region-aware**: migrar o `SNAP_AREAS` inline para `protected_areas_uy.json` (mesmo formato do RS/SC), unificando a camada legal.
 
 #### 🥈 Média prioridade — qualidade e produto
@@ -398,6 +398,7 @@ No Netlify: Site settings → Environment variables → adicionar as mesmas duas
 
 #### ✅ Concluído recentemente (jun/2026)
 
+- [x] **Expansão Paraná (BR-PR)**: hidrografia oficial (67.825 trechos, 2 bacias: Paraná + Vertente Atlântica), 108 UCs CNUC, espécies (regions += BR-PR) e legislação (piracema da Bacia do Paraná); clicável no seletor. Novo `build_boundary.mjs <UF>` parametrizado.
 - [x] **Campo `order` = Strahler (correção)**: `build_rs/sc_hydrography.mjs` passou a gravar `nustrahler` (tronco = ordem alta) em vez de `nuordemcda` (hierárquico invertido). Conserta o Porte (destacava cabeceiras como troncos) e destrava o GloFAS. **RS e SC regenerados** (só o campo `order`, geometria idêntica; Uruguai/Iguaçu maxOrder 9, Pelotas/Canoas 8)
 - [x] **Vazão dinâmica GloFAS** nos troncos (anomalia atual÷média; snap à célula-canal) + **legenda país-ciente das bacias** + **slider de tempo no heatmap**
 - [x] **Heatmap de espécies — upgrade visual + RS**: duas paletas alternáveis (Térmica/Espécie) com glow e normalização relativa+absoluta; legenda alinhada à paleta; **passou a renderizar nos rios do RS** (corrigido o memo preso por mutação in-place do `_trib.data` + match de ids compostos BR; teto de 2500 segmentos)
