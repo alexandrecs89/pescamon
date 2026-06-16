@@ -172,6 +172,16 @@ const COUNTRIES = [
     defaultZoom: 7,
   },
   {
+    id: 'BR-PR',
+    name: 'Brasil — Paraná',
+    shortName: 'Brasil (PR)',
+    flagUrl: 'https://flagcdn.com/br.svg',
+    available: true,
+    bbox: { minLat: -26.80, maxLat: -22.40, minLon: -54.70, maxLon: -47.90 },
+    center: { latitude: -24.6, longitude: -51.6 },
+    defaultZoom: 7,
+  },
+  {
     id: 'BR',
     name: 'Brasil',
     flagUrl: 'https://flagcdn.com/br.svg',
@@ -210,6 +220,10 @@ const BASINS_BY_COUNTRY = {
   ],
   'BR-SC': [
     { id: 'bacia_uruguai',      name: 'Bacia do Rio Uruguai',     emoji: '🏞️', color: '#f97316' },
+    { id: 'vertente_atlantica', name: 'Vertente Atlântica',       emoji: '🏖️', color: '#a855f7' },
+  ],
+  'BR-PR': [
+    { id: 'bacia_parana',       name: 'Bacia do Rio Paraná',      emoji: '🏞️', color: '#14b8a6' },
     { id: 'vertente_atlantica', name: 'Vertente Atlântica',       emoji: '🏖️', color: '#a855f7' },
   ],
 };
@@ -306,7 +320,7 @@ const RS_POLYGON = [
 // aqui servem para o CONTORNO no mapa e, no caso do RS, para o isPointInRS).
 // rs_boundary.json (IBGE, codarea=43) · uy_boundary.json (união das cuencas DINAGUA).
 // Para adicionar uma região nova: gerar o arquivo + acrescentar a entrada aqui.
-const _BOUNDARY_FILES = { 'BR-RS': 'rs_boundary.json', 'BR-SC': 'sc_boundary.json', 'UY': 'uy_boundary.json' };
+const _BOUNDARY_FILES = { 'BR-RS': 'rs_boundary.json', 'BR-SC': 'sc_boundary.json', 'BR-PR': 'pr_boundary.json', 'UY': 'uy_boundary.json' };
 const _boundaryRings = {};        // countryId -> [ [ [lat,lon], ... ], ... ]
 const _boundarySubs = new Set();
 function getBoundaryRings(countryId) { return _boundaryRings[countryId] || null; }
@@ -1548,7 +1562,7 @@ const extraRiversCache = {}; // Resetado para v5-state-filtered
 // — sobrevive ao HMR do Vite (que reexecuta o módulo)
 // — o bloco de carregamento só roda se tilesLoaded === false
 // ============================================================
-const _TRIB_VERSION = 'v50-sc-dense'; // SC denso (Strahler>=2, ~168k trechos) — render por multi-polyline por bacia
+const _TRIB_VERSION = 'v51-pr'; // + Paraná (BR-PR): bacia_parana (~67k) + vertente_atlantica
 if (!globalThis.__pescamon_trib__ || globalThis.__pescamon_trib__._version !== _TRIB_VERSION) {
   console.log('[TRIB] Resetando singleton para versão', _TRIB_VERSION);
   globalThis.__pescamon_trib__ = {
@@ -8927,6 +8941,9 @@ function AllWatercourses({ tributaryLines, waterQualityData, species, occurrence
     'bacia_jacui_BR-RS':     '#22d3ee',
     bacia_lagopatos:         '#3b82f6',
     'bacia_lagopatos_BR-RS': '#3b82f6',
+    bacia_parana:            '#14b8a6',
+    'bacia_parana_BR-PR':    '#14b8a6',
+    'vertente_atlantica_BR-PR': '#a855f7',
   };
   
   return (

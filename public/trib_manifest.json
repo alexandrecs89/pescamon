@@ -108,5 +108,17 @@
       "regionId": "vertente_atlantica_BR-SC",
       "baseRegionId": "vertente_atlantica"
     }
+  ],
+  "BR-PR": [
+    {
+      "file": "trib_pr_parana.json",
+      "regionId": "bacia_parana_BR-PR",
+      "baseRegionId": "bacia_parana"
+    },
+    {
+      "file": "trib_pr_vertente_atlantica.json",
+      "regionId": "vertente_atlantica_BR-PR",
+      "baseRegionId": "vertente_atlantica"
+    }
   ]
 }
