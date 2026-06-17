@@ -71,23 +71,22 @@ forma estável no app.
 | `public/trib_manifest.json` | Mapeia país → arquivos de rios |
 | `public/trib_rs_*.json` | Rios do RS divididos por bacia |
 | `public/rs_boundary.json` | Fronteira oficial IBGE do RS (recorte + contorno) |
-| `scripts/build_rs_boundary.mjs` | Fase 1: gera `rs_boundary.json` (malha IBGE) |
-| `scripts/build_rs_hydrography.mjs` | Fase 2: gera os `trib_rs_*.json` (BHO ANA) |
+| `scripts/build_boundary.mjs <UF>` | Fase 1: gera `<uf>_boundary.json` (malha IBGE) |
+| `scripts/build_hydrography.mjs <UF>` | Fase 2: gera os `trib_<uf>_*.json` (BHO ANA) |
 | `scripts/gpkg_geom.mjs` | Parser WKB/GPB do geopackage (genérico) |
 | `docs/EXPANSAO-ESTADOS.md` | **Guia para adicionar novos estados** |
 | `vite.config.js` | Config Vite (sem customizações de tamanho) |
 
 ## Scripts úteis
 ```bash
-# Diagnóstico do BHO (schema, COBACIA, Strahler) no bbox do RS
-node scripts/build_rs_hydrography.mjs --inspect
+# Diagnóstico do BHO (Strahler) no bbox do estado · exutórios reais · distribuição
+node scripts/build_hydrography.mjs RS --inspect
+node scripts/build_hydrography.mjs RS --terminals
+node scripts/build_hydrography.mjs RS --dry
 
-# Classificar e ver distribuição por bacia SEM gerar geometria (rápido)
-node scripts/build_rs_hydrography.mjs --dry
-
-# Gerar os 4 trib_rs_*.json (recortados à fronteira). Requer Node >= 22.5 e o
-# geopackage da ANA em .bho_tmp/trecho_drenagem.gpkg
-node scripts/build_rs_hydrography.mjs
+# Gerar os trib_<uf>_*.json (recortados à fronteira). Requer Node >= 22.5 e o
+# geopackage da ANA em .bho_tmp/trecho_drenagem.gpkg. UF = RS | SC | PR
+node scripts/build_hydrography.mjs RS
 ```
 
 ## Estrutura do objeto rio (formato `trib_rs_*.json`)

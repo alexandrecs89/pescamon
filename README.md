@@ -274,7 +274,6 @@ Um pilar do projeto é ajudar o pescador a pescar **dentro da lei**. As camadas 
 - Login social Apple ainda não configurado (Google e Facebook ativos).
 - LSTM inativo por falta de volume de dados (threshold: ≥30 capturas/espécie).
 - Hidrografia oficial disponível para **RS**, **SC** e **UY**; demais estados/regiões seguem o pipeline de expansão (ver `docs/EXPANSAO-ESTADOS.md`).
-- Os scripts de hidrografia por estado (`build_rs_hydrography.mjs`, `build_sc_hydrography.mjs`) ainda repetem código — falta unificá-los num único script parametrizado por UF.
 - Espécies de SC usam o catálogo compartilhado da Bacia do Uruguai; um refinamento por curso (litoral vs. interior) fica como melhoria futura.
 - ~~Bug: troca muito rápida de país somava trechos de duas regiões~~ — **corrigido** (loads de hidrografia concorrentes agora abortam por token de geração).
 
@@ -376,7 +375,7 @@ No Netlify: Site settings → Environment variables → adicionar as mesmas duas
 
 #### 🥇 Alta prioridade — escalar territorialmente
 
-- [ ] **Unificar os scripts de hidrografia num único `build_hydrography.mjs <uf>`** (`docs/EXPANSAO-ESTADOS.md` §8): hoje `build_rs_hydrography.mjs` e `build_sc_hydrography.mjs` repetem ~90% do código (mudam só bbox, bacias, `classifyTerminal` e `BASIN_MIN_STRAHLER`). Parametrizar evita duplicação no 3º estado. (Já feito: `build_protected_areas.mjs <uf>`, `build_sc_boundary.mjs`, e os branches do app passaram a usar `/^BR-/`.)
+- [x] **Scripts de hidrografia/fronteira unificados**: `build_hydrography.mjs <uf>` e `build_boundary.mjs <UF>` (parametrizados por `UF_CONFIG`: bbox, bacias+limiar, `classifyTerminal`, prefixo, `dpEps`/`round5`) substituem os 5 scripts por estado (RS/SC/PR). Validado: reproduzem byte-idêntico os JSONs commitados dos 3 estados.
 - [x] **Paraná (BR-PR, codarea 41)** — expansão completa: fronteira (IBGE) + hidrografia (BHO, 67.825 trechos em 2 bacias: Paraná + Vertente Atlântica) + 108 UCs (CNUC) + catálogo de espécies (regions += BR-PR) + legislação (piracema da Bacia do Paraná, ~nov–fev, IAT-PR/IBAMA) + clicável no seletor geográfico.
 - [ ] **Áreas protegidas do Uruguai no modelo region-aware**: migrar o `SNAP_AREAS` inline para `protected_areas_uy.json` (mesmo formato do RS/SC), unificando a camada legal.
 
@@ -472,8 +471,8 @@ No Netlify: Site settings → Environment variables → adicionar as mesmas duas
 
 | Arquivo | Responsabilidade |
 |---|---|
-| `scripts/build_rs_boundary.mjs` · `build_sc_boundary.mjs` | Fronteira oficial do estado (IBGE malhas v3, codarea 43=RS / 42=SC) → `public/<uf>_boundary.json` |
-| `scripts/build_rs_hydrography.mjs` · `build_sc_hydrography.mjs` | Hidrografia do estado (ANA BHO 2017): classifica por fluxo, recorta à fronteira, simplifica → `public/trib_<uf>_*.json` |
+| `scripts/build_boundary.mjs <UF>` | Fronteira oficial de qualquer estado BR (IBGE malhas v3 por codarea) → `public/<uf>_boundary.json` |
+| `scripts/build_hydrography.mjs <UF>` | Hidrografia do estado (ANA BHO 2017): classifica por fluxo, recorta à fronteira, simplifica → `public/trib_<uf>_*.json`. `UF_CONFIG` (RS/SC/PR) com bbox, bacias+limiar, `classifyTerminal`, `dpEps`/`round5` |
 | `scripts/build_uy_boundary.mjs` · `build_uy_hydrography.mjs` | Fronteira e hidrografia do Uruguai (DINAGUA WFS) → `public/uy_boundary.json`, `trib_uy_*.json` |
 | `scripts/build_protected_areas.mjs <uf>` | UCs do CNUC/MMA (shapefile) → `public/protected_areas_<uf>.json` (RS=101, SC=179) |
 | `scripts/build_br_geo.mjs` | Silhueta nacional + 27 estados (IBGE) → `public/br_boundary.json`, `public/br_states.json` |
