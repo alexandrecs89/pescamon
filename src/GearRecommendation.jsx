@@ -1,6 +1,8 @@
-import { useMemo, useState, useEffect } from 'react';
-import { Package, Fish, ChevronRight, Star, Flame, AlertTriangle, Store, MapPin, Phone, ExternalLink, Check } from 'lucide-react';
-import { fetchHotBaits, getProductsForSpecies } from './supabase.js';
+import { useMemo, useState, useEffect, useRef } from 'react';
+import { Package, Fish, ChevronRight, Star, Flame, AlertTriangle, Store, MapPin, Phone, ExternalLink, Check, ShoppingCart } from 'lucide-react';
+import { fetchHotBaits, getProductsForSpecies, logMarketplaceEvent } from './supabase.js';
+
+const CURRENCY_SYMBOL = { UYU: '$', ARS: '$', BRL: 'R$' };
 
 // Nota: iscas e equipamentos validados para o Rio Santa Lucía, Uruguay.
 // Recomenda-se confirmar com pescadores e guias locais da região antes de uma saída.
@@ -559,13 +561,15 @@ function bestRangeForWeight(gearList, avgKg) {
   }) || gearList[gearList.length - 1];
 }
 
-export default function GearRecommendation({ selectedSpeciesList, focusedCell, occurrences, userLocation }) {
+export default function GearRecommendation({ selectedSpeciesList, focusedCell, occurrences, userLocation, buyerCountry = null }) {
   const [remoteHotBaits, setRemoteHotBaits] = useState({});
   const [ownedGear, setOwnedGear] = useState(() => {
     try { return JSON.parse(localStorage.getItem('pescamon_owned_gear') || '{}'); } catch { return {}; }
   });
   const [storeProducts, setStoreProducts] = useState([]);
   const [storesLoading, setStoresLoading] = useState(false);
+  const [buyClicked, setBuyClicked] = useState({}); // productId -> true (mostra "checkout em breve")
+  const viewedRef = useRef(new Set()); // dedupe de eventos 'view' por produto
 
   useEffect(() => {
     if (selectedSpeciesList.length === 0) return;
@@ -602,6 +606,39 @@ export default function GearRecommendation({ selectedSpeciesList, focusedCell, o
       localStorage.setItem('pescamon_owned_gear', JSON.stringify(next));
       return next;
     });
+  }
+
+  // Produtos de marketplace (curados/destaque e ativos) por espécie — "Acessório parceiro"
+  const partnerBySpecies = useMemo(() => {
+    const map = {};
+    for (const p of storeProducts) {
+      if (p.active === false) continue;        // inativos no marketplace não aparecem
+      if (!p.featured) continue;               // a vitrine de acessório parceiro mostra só destaques
+      if (!p.fishing_stores) continue;
+      if (p.fishing_stores.active === false) continue;
+      for (const spId of (p.species_ids || [])) {
+        (map[spId] = map[spId] || []).push(p);
+      }
+    }
+    // ordena por destaque (já são todos featured) e nome
+    for (const k of Object.keys(map)) map[k].sort((a, b) => a.name.localeCompare(b.name));
+    return map;
+  }, [storeProducts]);
+
+  // Funil: loga 'view' uma vez por produto parceiro exibido
+  useEffect(() => {
+    for (const list of Object.values(partnerBySpecies)) {
+      for (const p of list) {
+        if (viewedRef.current.has(p.id)) continue;
+        viewedRef.current.add(p.id);
+        logMarketplaceEvent('view', { productId: p.id, storeId: p.store_id, country: buyerCountry });
+      }
+    }
+  }, [partnerBySpecies, buyerCountry]);
+
+  function handleBuy(p) {
+    logMarketplaceEvent('click_buy', { productId: p.id, storeId: p.store_id, country: buyerCountry });
+    setBuyClicked(prev => ({ ...prev, [p.id]: true }));
   }
 
   const recommendations = useMemo(() => {
@@ -714,6 +751,58 @@ export default function GearRecommendation({ selectedSpeciesList, focusedCell, o
               );
             })}
           </div>
+          {/* Acessório parceiro (marketplace) */}
+          {(partnerBySpecies[sp.id] || []).length > 0 && (
+            <div style={{marginTop:12}}>
+              <div className="gear-section-label"><ShoppingCart size={13} /> Acessório parceiro</div>
+              <div style={{display:'flex',flexDirection:'column',gap:8}}>
+                {partnerBySpecies[sp.id].map(p => {
+                  const s = p.fishing_stores;
+                  const sym = CURRENCY_SYMBOL[p.currency] || '$';
+                  const price = (p.price ?? p.price_uyu);
+                  return (
+                    <div key={p.id} style={{background:'#0f172a',borderRadius:8,padding:'10px 12px',border:'1px solid #78350f'}}>
+                      <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',gap:8}}>
+                        <div style={{minWidth:0}}>
+                          <div style={{fontWeight:700,fontSize:'0.82rem',color:'#f1f5f9',display:'flex',alignItems:'center',gap:5}}>
+                            <Star size={11} fill="#f59e0b" color="#f59e0b" style={{flexShrink:0}} />
+                            <span style={{overflow:'hidden',textOverflow:'ellipsis'}}>{p.name}</span>
+                          </div>
+                          <div style={{fontSize:'0.7rem',color:'#94a3b8',marginTop:2}}>
+                            {s?.name && <>🏪 {s.name}</>}
+                            {p.brand && <> · {p.brand}</>}
+                          </div>
+                          <div style={{fontSize:'0.68rem',color:'#64748b',marginTop:3,fontStyle:'italic'}}>
+                            Acessório que se soma à vara + linha (não as substitui).
+                          </div>
+                        </div>
+                        <div style={{textAlign:'right',flexShrink:0}}>
+                          {price != null && <div style={{fontWeight:700,fontSize:'0.85rem',color:'#f59e0b'}}>{sym}{price} {p.currency || 'UYU'}</div>}
+                          <button
+                            type="button"
+                            onClick={() => handleBuy(p)}
+                            style={{marginTop:5,fontSize:'0.72rem',padding:'5px 12px',borderRadius:6,border:'none',background:'#d97706',color:'#fff',fontWeight:700,cursor:'pointer',display:'inline-flex',alignItems:'center',gap:4}}
+                          >
+                            <ShoppingCart size={11} /> Comprar
+                          </button>
+                        </div>
+                      </div>
+                      {buyClicked[p.id] && (
+                        <div style={{marginTop:8,fontSize:'0.7rem',color:'#fbbf24',background:'#1c1917',borderRadius:6,padding:'6px 9px',display:'flex',alignItems:'center',justifyContent:'space-between',gap:8}}>
+                          <span>🛒 Checkout em breve — pagamento via Mercado Pago será habilitado em breve.</span>
+                          {s?.whatsapp && (
+                            <a href={`https://wa.me/${s.whatsapp.replace(/\D/g,'')}`} target="_blank" rel="noreferrer"
+                              style={{color:'#4ade80',textDecoration:'none',whiteSpace:'nowrap'}}>💬 Falar com a loja</a>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
           {/* Lojas próximas */}
           {(() => {
             const neededGearTypes = ['rod','reel','line','hook','leader'].filter(gt => {

@@ -7546,7 +7546,7 @@ function App() {
             <button className="collapse-btn" onClick={() => toggleCardCollapse('gear')} type="button">{collapsedCards['gear'] ? <ChevronDown size={14} /> : <ChevronUp size={14} />}</button>
             {authSession && <button onClick={() => setStoreAdminOpen(true)} title="Painel da minha loja" style={{marginLeft:'auto',padding:'3px 10px',background:'transparent',border:'1px solid #334155',borderRadius:5,color:'#d97706',cursor:'pointer',fontSize:'0.72rem',fontWeight:600}}>🏪 Minha loja</button>}
           </div>
-          {!collapsedCards['gear'] && <GearRecommendation selectedSpeciesList={selectedSpeciesList} focusedCell={focusedCell} occurrences={occurrences} userLocation={userLocation} />}
+          {!collapsedCards['gear'] && <GearRecommendation selectedSpeciesList={selectedSpeciesList} focusedCell={focusedCell} occurrences={occurrences} userLocation={userLocation} buyerCountry={/^BR-/.test(selectedCountry) ? 'BR' : selectedCountry} />}
         </div>
 
         <div className={`profile-card gear-card${collapsedCards['buoy'] ? ' collapsed' : ''}`} style={{ gridColumn: '1 / -1' }}>

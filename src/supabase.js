@@ -818,6 +818,19 @@ export async function deleteStoreProduct(productId) {
   if (error) throw error;
 }
 
+// ── Marketplace: funil de eventos (view / click_buy) ─────────────────────────
+// Best-effort: nunca lança erro para não atrapalhar a UI. Loga a intenção do
+// pescador para os relatórios do dashboard (views → cliques → pedidos).
+export async function logMarketplaceEvent(type, { productId = null, storeId = null, country = null } = {}) {
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    await supabase.from('marketplace_events').insert({
+      type, product_id: productId, store_id: storeId, country,
+      user_id: user?.id || null,
+    });
+  } catch { /* silencioso — funil é best-effort */ }
+}
+
 // ── Marketplace: status das contas de recebimento (Mercado Pago) ──────────────
 // Lê a view merchant_connection_status, que expõe só o status da loja do próprio
 // usuário (sem tokens). A conexão OAuth em si é feita na etapa de checkout (Fase 4).

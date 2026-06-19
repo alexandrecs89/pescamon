@@ -174,8 +174,17 @@ loja ganhou `slug`, `home_country`, `default_commission_pct`, `active`, `feature
 **Pagamentos (Mercado Pago)** que mostra o status de conexão por país (lê a view
 `merchant_connection_status` via `getMerchantConnections`). O botão "Conectar conta MP" está
 **desabilitado** de propósito — depende da Fase 0/4 (app no MP DevCenter + OAuth). i18n PT/ES/EN
-adicionado. Próximo: **Fase 3** (vitrine "Acessório parceiro" em `GearRecommendation.jsx` lendo
-`price`/`currency`/`featured`/`active` + log de `marketplace_events`).
+adicionado.
+
+**Status Fase 3 (vitrine):** ✅ feito em `src/GearRecommendation.jsx`. Nova seção **"Acessório
+parceiro"** por espécie, que mostra os produtos `featured && active` de lojas ativas (ex.: Tararira →
+chicote Taralinea), com preço+moeda e botão **Comprar**. O texto deixa claro que o acessório **se soma**
+à vara+linha. Funil: loga `view` (uma vez por produto, dedupe via ref) e `click_buy` via
+`logMarketplaceEvent` (nova função em `supabase.js`). Como o checkout (Fase 4) não existe, "Comprar"
+loga a intenção e mostra "Checkout em breve" + atalho de WhatsApp da loja (fallback). O `buyerCountry`
+é passado do `main.jsx` (estados `BR-*` → `BR`). Componente usa PT hardcoded (sem i18n, como o resto
+do arquivo). Próximo: **Fase 0** (de-risk externo: app MP DevCenter UY + OAuth Taralinea + teste de
+split no sandbox) e então **Fase 4** (Edge Functions `create-checkout` + `mp-webhook`).
 
 ## Componentes do app a tocar
 - `src/StoreAdmin.jsx` (dashboard admin — estender)
