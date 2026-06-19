@@ -139,6 +139,34 @@ funil (views→cliques→pedidos→pagos) a partir de `marketplace_events` + `or
 **Caminho crítico:** a **Fase 0** trava tudo — se o split do MP UY não se comportar no sandbox, revisitar o
 rail antes de investir nas telas.
 
+## Atualização — Fase 1 iniciada (jun/2026)
+
+**Decisão de arquitetura:** ao iniciar a Fase 1, descobrimos que o app **já tem** um sistema de
+lojas (`fishing_stores` — uma loja por `user_id`, com whatsapp/telefone/website) e produtos
+(`store_products` — `gear_type`, `species_ids[]`, `price_uyu`, `in_stock`), e a vitrine em
+`GearRecommendation` já consome `store_products` por espécie (`getProductsForSpecies`). Em vez de
+criar `merchants`/`products` do zero (duplicando tudo), **estendemos o existente**:
+
+- **`fishing_stores`** (= merchant) ganha: `slug`, `home_country`, `default_commission_pct`,
+  `active`, `featured`.
+- **`store_products`** ganha: `price`, `currency`, `product_type`, `featured`, `active`
+  (mantém `price_uyu`/`in_stock` por compatibilidade; `price` é backfilled de `price_uyu`).
+- **Tabelas novas (só o transacional):** `merchant_accounts` (conta MP por país; tokens OAuth
+  **só service_role**, + view `merchant_connection_status` que mostra só o status da própria loja),
+  `orders`, `order_items`, `marketplace_events`.
+
+Tudo isso está em **`supabase-marketplace.sql`** (idempotente). RLS: catálogo público p/ leitura;
+`orders`/`order_items` visíveis ao comprador e ao dono da loja; tokens nunca expostos ao cliente;
+escrita transacional via `service_role` (Edge Functions). O **seed da Taralinea** está no arquivo
+**comentado**, aguardando o `auth.users.id` do dono que administrará a marca.
+
+> Nota: a curadoria de destaque é, no v1, **por dono da loja** (RLS por `user_id`). Se Alexandre
+> criar a loja Taralinea sob a própria conta, ele controla `featured`/`active`. Um papel de
+> **admin de plataforma** (curadoria cross-loja) fica como refinamento futuro.
+
+**Status Fase 1:** SQL escrito na branch `feat/marketplace`. Falta **rodar no Supabase** e
+**descomentar/rodar o seed** com o `user_id` real. Depois: Fase 2 (dashboard admin).
+
 ## Componentes do app a tocar
 - `src/StoreAdmin.jsx` (dashboard admin — estender)
 - `src/GearRecommendation.jsx` (vitrine "Acessório parceiro")
