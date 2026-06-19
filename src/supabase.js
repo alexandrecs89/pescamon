@@ -831,6 +831,36 @@ export async function logMarketplaceEvent(type, { productId = null, storeId = nu
   } catch { /* silencioso — funil é best-effort */ }
 }
 
+// ── Marketplace: relatórios do lojista (Fase 5) ──────────────────────────────
+// Pedidos da loja (RLS: só o dono da loja lê). Inclui itens para detalhe.
+export async function getStoreOrders(storeId, { limit = 100 } = {}) {
+  if (!storeId) return [];
+  const { data, error } = await supabase
+    .from('orders')
+    .select('*, order_items(id, name, qty, unit_price, currency)')
+    .eq('store_id', storeId)
+    .order('created_at', { ascending: false })
+    .limit(limit);
+  if (error) throw error;
+  return data || [];
+}
+
+// Funil da loja: contagem de eventos por tipo (view / click_buy).
+export async function getMarketplaceFunnel(storeId) {
+  if (!storeId) return { views: 0, clicks: 0 };
+  const countFor = async (type) => {
+    const { count, error } = await supabase
+      .from('marketplace_events')
+      .select('*', { count: 'exact', head: true })
+      .eq('store_id', storeId)
+      .eq('type', type);
+    if (error) throw error;
+    return count || 0;
+  };
+  const [views, clicks] = await Promise.all([countFor('view'), countFor('click_buy')]);
+  return { views, clicks };
+}
+
 // ── Marketplace: status das contas de recebimento (Mercado Pago) ──────────────
 // Lê a view merchant_connection_status, que expõe só o status da loja do próprio
 // usuário (sem tokens). A conexão OAuth em si é feita na etapa de checkout (Fase 4).

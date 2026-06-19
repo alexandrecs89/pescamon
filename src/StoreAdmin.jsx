@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
-import { Package, Plus, Trash2, Store, Fish, ChevronDown, Check, X, Star } from 'lucide-react';
-import { getMyStore, upsertFishingStore, getStoreProducts, upsertStoreProduct, deleteStoreProduct, getMerchantConnections } from './supabase.js';
+import { Package, Plus, Trash2, Store, Fish, ChevronDown, Check, X, Star, BarChart3 } from 'lucide-react';
+import { getMyStore, upsertFishingStore, getStoreProducts, upsertStoreProduct, deleteStoreProduct, getMerchantConnections, getStoreOrders, getMarketplaceFunnel } from './supabase.js';
 import { useT } from './i18n.jsx';
 
 const GEAR_TYPE_LABELS = {
@@ -64,6 +64,9 @@ export default function StoreAdmin({ isOpen, onClose, authSession, userLocation 
   const [showProductForm, setShowProductForm] = useState(false);
   const [editingProduct, setEditingProduct] = useState(null);
   const [connections, setConnections] = useState([]);
+  const [orders, setOrders] = useState([]);
+  const [funnel, setFunnel] = useState({ views: 0, clicks: 0 });
+  const [reportsLoading, setReportsLoading] = useState(false);
   const [msg, setMsg] = useState(null);
 
   const userId = authSession?.user?.id;
@@ -90,6 +93,18 @@ export default function StoreAdmin({ isOpen, onClose, authSession, userLocation 
       .catch(e => setMsg({ type: 'error', text: e.message }))
       .finally(() => setLoading(false));
   }, [isOpen, userId]);
+
+  // Carrega relatórios sob demanda ao abrir a aba (e quando a loja muda)
+  useEffect(() => {
+    if (tab !== 'reports' || !store?.id) return;
+    let cancelled = false;
+    setReportsLoading(true);
+    Promise.all([getStoreOrders(store.id), getMarketplaceFunnel(store.id)])
+      .then(([ords, fun]) => { if (!cancelled) { setOrders(ords); setFunnel(fun); } })
+      .catch(e => { if (!cancelled) setMsg({ type: 'error', text: e.message }); })
+      .finally(() => { if (!cancelled) setReportsLoading(false); });
+    return () => { cancelled = true; };
+  }, [tab, store?.id]);
 
   async function handleSaveStore(e) {
     e.preventDefault();
@@ -207,7 +222,7 @@ export default function StoreAdmin({ isOpen, onClose, authSession, userLocation 
         {userId && (
           <>
             <div style={{ display: 'flex', gap: 4, marginBottom: 18, borderBottom: '1px solid #334155', paddingBottom: 0 }}>
-              {[['store', t('storeTabStore')], ['products', `${t('storeTabProducts')} (${products.length})`]].map(([key, label]) => (
+              {[['store', t('storeTabStore')], ['products', `${t('storeTabProducts')} (${products.length})`], ['reports', t('storeTabReports')]].map(([key, label]) => (
                 <button key={key} onClick={() => setTab(key)} style={{ padding: '6px 16px', background: 'transparent', border: 'none', borderBottom: tab === key ? '2px solid #d97706' : '2px solid transparent', color: tab === key ? '#f59e0b' : '#64748b', cursor: 'pointer', fontWeight: tab === key ? 700 : 400, fontSize: '0.82rem' }}>{label}</button>
               ))}
             </div>
@@ -453,6 +468,104 @@ export default function StoreAdmin({ isOpen, onClose, authSession, userLocation 
                     ))}
                   </div>
                 )}
+              </div>
+            )}
+
+            {/* Tab: Reports */}
+            {!loading && tab === 'reports' && (
+              <div>
+                {!store ? (
+                  <div style={{ color: '#f59e0b', fontSize: '0.8rem', padding: '10px 14px', background: '#0f172a', borderRadius: 7 }}>
+                    ⚠️ {t('storeSaveDataFirst')}
+                  </div>
+                ) : reportsLoading ? (
+                  <div style={{ color: '#64748b', textAlign: 'center', padding: 20 }}>{t('storeLoading')}</div>
+                ) : (() => {
+                  const paid = orders.filter(o => o.status === 'paid');
+                  const byCur = {};
+                  for (const o of paid) {
+                    const c = o.currency || 'UYU';
+                    byCur[c] = byCur[c] || { revenue: 0, commission: 0 };
+                    byCur[c].revenue += Number(o.total || 0);
+                    byCur[c].commission += Number(o.commission_amount || 0);
+                  }
+                  const funnelSteps = [
+                    { label: t('storeRepViews'), value: funnel.views, color: '#38bdf8' },
+                    { label: t('storeRepClicks'), value: funnel.clicks, color: '#f59e0b' },
+                    { label: t('storeRepOrders'), value: orders.length, color: '#a855f7' },
+                    { label: t('storeRepPaid'), value: paid.length, color: '#22c55e' },
+                  ];
+                  const maxV = Math.max(1, ...funnelSteps.map(s => s.value));
+                  return (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                      {/* Funil */}
+                      <div>
+                        <div style={{ fontSize: '0.78rem', fontWeight: 700, color: '#cbd5e1', marginBottom: 8 }}>📊 {t('storeRepFunnel')}</div>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                          {funnelSteps.map(s => (
+                            <div key={s.label} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                              <span style={{ fontSize: '0.72rem', color: '#94a3b8', width: 120, flexShrink: 0 }}>{s.label}</span>
+                              <div style={{ flex: 1, background: '#0f172a', borderRadius: 4, height: 18, overflow: 'hidden' }}>
+                                <div style={{ width: `${Math.round((s.value / maxV) * 100)}%`, minWidth: s.value > 0 ? 2 : 0, height: '100%', background: s.color }} />
+                              </div>
+                              <span style={{ fontSize: '0.78rem', fontWeight: 700, color: '#f1f5f9', width: 40, textAlign: 'right' }}>{s.value}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Comissão / receita */}
+                      <div>
+                        <div style={{ fontSize: '0.78rem', fontWeight: 700, color: '#cbd5e1', marginBottom: 8 }}>💰 {t('storeRepCommission')}</div>
+                        {Object.keys(byCur).length === 0 ? (
+                          <div style={{ fontSize: '0.75rem', color: '#475569' }}>{t('storeRepNoOrders')}</div>
+                        ) : (
+                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                            {Object.entries(byCur).map(([cur, v]) => (
+                              <div key={cur} style={{ background: '#0f172a', borderRadius: 8, padding: '10px 14px', border: '1px solid #334155', minWidth: 140 }}>
+                                <div style={{ fontSize: '0.68rem', color: '#64748b' }}>{cur}</div>
+                                <div style={{ fontSize: '0.95rem', fontWeight: 700, color: '#22c55e' }}>${v.commission.toFixed(2)}</div>
+                                <div style={{ fontSize: '0.68rem', color: '#64748b', marginTop: 2 }}>{t('storeRepRevenue')}: ${v.revenue.toFixed(2)}</div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Lista de pedidos */}
+                      <div>
+                        <div style={{ fontSize: '0.78rem', fontWeight: 700, color: '#cbd5e1', marginBottom: 8 }}>🧾 {t('storeRepOrders')} ({orders.length})</div>
+                        {orders.length === 0 ? (
+                          <div style={{ fontSize: '0.75rem', color: '#475569' }}>{t('storeRepNoOrders')}</div>
+                        ) : (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+                            {orders.map(o => {
+                              const stColor = o.status === 'paid' ? '#22c55e' : o.status === 'pending' ? '#f59e0b' : '#ef4444';
+                              return (
+                                <div key={o.id} style={{ background: '#0f172a', borderRadius: 7, padding: '8px 12px', border: '1px solid #1e293b', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                                  <div style={{ minWidth: 0 }}>
+                                    <div style={{ fontSize: '0.76rem', color: '#cbd5e1', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                      {(o.order_items || []).map(i => `${i.qty}× ${i.name}`).join(', ') || o.id.slice(0, 8)}
+                                    </div>
+                                    <div style={{ fontSize: '0.66rem', color: '#64748b' }}>{new Date(o.created_at).toLocaleDateString()}{o.country && ` · ${o.country}`}</div>
+                                  </div>
+                                  <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                                    <div style={{ fontSize: '0.78rem', fontWeight: 700, color: '#f1f5f9' }}>${Number(o.total || 0).toFixed(2)} {o.currency || 'UYU'}</div>
+                                    <span style={{ fontSize: '0.64rem', color: stColor, border: `1px solid ${stColor}`, borderRadius: 4, padding: '0 5px' }}>{o.status}</span>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+
+                      <div style={{ fontSize: '0.66rem', color: '#475569', borderTop: '1px solid #1e293b', paddingTop: 8 }}>
+                        ℹ️ {t('storeRepHint')}
+                      </div>
+                    </div>
+                  );
+                })()}
               </div>
             )}
           </>

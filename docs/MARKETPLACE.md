@@ -131,8 +131,11 @@ agrupado por lojista); log de `marketplace_events` (`view`, `click_buy`).
 - Edge Function **`mp-webhook`**: valida assinatura → atualiza `order` (paid/failed) → grava
   `commission_amount` + `mp_payment_id`. Telas de sucesso/erro (`back_urls`).
 
-**Fase 5 — Relatórios + funil:** painel admin com pedidos pagos, comissão acumulada por lojista/período e
-funil (views→cliques→pedidos→pagos) a partir de `marketplace_events` + `orders`.
+**Fase 5 — Relatórios + funil:** ✅ feito. Nova aba **Relatórios** no `StoreAdmin.jsx` com: funil
+(views→cliques→pedidos→pagos) em barras, comissão acumulada + receita por moeda, e lista de pedidos.
+Dados via `getStoreOrders` + `getMarketplaceFunnel` (supabase.js), RLS por dono. i18n PT/ES/EN.
+Os números de pedidos/comissão ficam zerados até o checkout (Fase 4) gerar `orders`; o funil de
+views/cliques já popula com o uso real da vitrine.
 
 **Fase 6 — Polimento + conformidade:** disclaimer, LGPD/Ley 18.331 (dado mínimo), refresh de token, erros.
 
