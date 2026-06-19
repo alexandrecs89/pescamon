@@ -818,3 +818,16 @@ export async function deleteStoreProduct(productId) {
   if (error) throw error;
 }
 
+// ── Marketplace: status das contas de recebimento (Mercado Pago) ──────────────
+// Lê a view merchant_connection_status, que expõe só o status da loja do próprio
+// usuário (sem tokens). A conexão OAuth em si é feita na etapa de checkout (Fase 4).
+export async function getMerchantConnections(storeId) {
+  if (!storeId) return [];
+  const { data, error } = await supabase
+    .from('merchant_connection_status')
+    .select('country, provider, oauth_status, connected_at')
+    .eq('store_id', storeId);
+  if (error) throw error;
+  return data || [];
+}
+

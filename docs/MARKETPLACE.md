@@ -164,8 +164,18 @@ escrita transacional via `service_role` (Edge Functions). O **seed da Taralinea*
 > criar a loja Taralinea sob a própria conta, ele controla `featured`/`active`. Um papel de
 > **admin de plataforma** (curadoria cross-loja) fica como refinamento futuro.
 
-**Status Fase 1:** SQL escrito na branch `feat/marketplace`. Falta **rodar no Supabase** e
-**descomentar/rodar o seed** com o `user_id` real. Depois: Fase 2 (dashboard admin).
+**Status Fase 1:** ✅ SQL `supabase-marketplace.sql` **executado com sucesso no Supabase**. Falta só
+**descomentar/rodar o seed** da Taralinea com o `user_id` real do dono.
+
+**Status Fase 2 (dashboard admin):** ✅ feito em `src/StoreAdmin.jsx`. O CRUD de produtos ganhou
+campos de marketplace: `product_type`, `price` + `currency` (UYU/ARS/BRL), toggles **destaque** e
+**ativo** (mantém `price_uyu` em sincronia quando a moeda é UYU, p/ a vitrine atual). O formulário da
+loja ganhou `slug`, `home_country`, `default_commission_pct`, `active`, `featured` e um painel
+**Pagamentos (Mercado Pago)** que mostra o status de conexão por país (lê a view
+`merchant_connection_status` via `getMerchantConnections`). O botão "Conectar conta MP" está
+**desabilitado** de propósito — depende da Fase 0/4 (app no MP DevCenter + OAuth). i18n PT/ES/EN
+adicionado. Próximo: **Fase 3** (vitrine "Acessório parceiro" em `GearRecommendation.jsx` lendo
+`price`/`currency`/`featured`/`active` + log de `marketplace_events`).
 
 ## Componentes do app a tocar
 - `src/StoreAdmin.jsx` (dashboard admin — estender)
