@@ -172,6 +172,16 @@ const COUNTRIES = [
     defaultZoom: 7,
   },
   {
+    id: 'BR-PR',
+    name: 'Brasil — Paraná',
+    shortName: 'Brasil (PR)',
+    flagUrl: 'https://flagcdn.com/br.svg',
+    available: true,
+    bbox: { minLat: -26.80, maxLat: -22.40, minLon: -54.70, maxLon: -47.90 },
+    center: { latitude: -24.6, longitude: -51.6 },
+    defaultZoom: 7,
+  },
+  {
     id: 'BR',
     name: 'Brasil',
     flagUrl: 'https://flagcdn.com/br.svg',
@@ -212,6 +222,10 @@ const BASINS_BY_COUNTRY = {
     { id: 'bacia_uruguai',      name: 'Bacia do Rio Uruguai',     emoji: '🏞️', color: '#f97316' },
     { id: 'vertente_atlantica', name: 'Vertente Atlântica',       emoji: '🏖️', color: '#a855f7' },
   ],
+  'BR-PR': [
+    { id: 'bacia_parana',       name: 'Bacia do Rio Paraná',      emoji: '🏞️', color: '#14b8a6' },
+    { id: 'vertente_atlantica', name: 'Vertente Atlântica',       emoji: '🏖️', color: '#a855f7' },
+  ],
 };
 
 // Conjunto com todos os ids de bacia de um país (estado inicial = todas visíveis).
@@ -234,6 +248,30 @@ function loadSavedCountry() {
 
 function saveCountry(id) {
   try { localStorage.setItem('pescamon_country', id); } catch {}
+}
+
+// Persistência da seleção de bacias por país (sobrevive a reload/remontagem do App).
+// Sem registro salvo → null (o chamador cai no default "todas").
+function loadSavedBasins(country) {
+  try {
+    const raw = localStorage.getItem('pescamon_basins');
+    if (!raw) return null;
+    const map = JSON.parse(raw);
+    const ids = map?.[country];
+    if (!Array.isArray(ids)) return null;
+    // Filtra contra os ids válidos do país (descarta bacias removidas/renomeadas).
+    const valid = allBasinIds(country);
+    return new Set(ids.filter(id => valid.has(id)));
+  } catch { return null; }
+}
+
+function saveBasins(country, set) {
+  try {
+    const raw = localStorage.getItem('pescamon_basins');
+    const map = raw ? (JSON.parse(raw) || {}) : {};
+    map[country] = [...set];
+    localStorage.setItem('pescamon_basins', JSON.stringify(map));
+  } catch {}
 }
 
 // Polígono preciso do RS com coordenadas reais das cidades
@@ -282,7 +320,7 @@ const RS_POLYGON = [
 // aqui servem para o CONTORNO no mapa e, no caso do RS, para o isPointInRS).
 // rs_boundary.json (IBGE, codarea=43) · uy_boundary.json (união das cuencas DINAGUA).
 // Para adicionar uma região nova: gerar o arquivo + acrescentar a entrada aqui.
-const _BOUNDARY_FILES = { 'BR-RS': 'rs_boundary.json', 'BR-SC': 'sc_boundary.json', 'UY': 'uy_boundary.json' };
+const _BOUNDARY_FILES = { 'BR-RS': 'rs_boundary.json', 'BR-SC': 'sc_boundary.json', 'BR-PR': 'pr_boundary.json', 'UY': 'uy_boundary.json' };
 const _boundaryRings = {};        // countryId -> [ [ [lat,lon], ... ], ... ]
 const _boundarySubs = new Set();
 function getBoundaryRings(countryId) { return _boundaryRings[countryId] || null; }
@@ -1524,7 +1562,7 @@ const extraRiversCache = {}; // Resetado para v5-state-filtered
 // — sobrevive ao HMR do Vite (que reexecuta o módulo)
 // — o bloco de carregamento só roda se tilesLoaded === false
 // ============================================================
-const _TRIB_VERSION = 'v50-sc-dense'; // SC denso (Strahler>=2, ~168k trechos) — render por multi-polyline por bacia
+const _TRIB_VERSION = 'v51-pr'; // + Paraná (BR-PR): bacia_parana (~67k) + vertente_atlantica
 if (!globalThis.__pescamon_trib__ || globalThis.__pescamon_trib__._version !== _TRIB_VERSION) {
   console.log('[TRIB] Resetando singleton para versão', _TRIB_VERSION);
   globalThis.__pescamon_trib__ = {
@@ -1577,7 +1615,14 @@ async function loadTribsForCountry(countryId) {
     console.log('[TRIB] País já carregado, retornando');
     return;
   }
-  
+
+  // Token de geração: trocar de país rápido dispara loads concorrentes que faziam push()
+  // no MESMO _trib.data, misturando trechos de duas regiões. Cada load pega um token; após
+  // cada await checamos se ainda somos o load mais recente — se não, abortamos sem publicar.
+  const myToken = (_trib.loadToken || 0) + 1;
+  _trib.loadToken = myToken;
+  const isStale = () => _trib.loadToken !== myToken;
+
   console.log('[TRIB] Iniciando carregamento para', countryId);
   _trib.data = [];
   _trib.seenIds = new Set();
@@ -1660,7 +1705,8 @@ async function loadTribsForCountry(countryId) {
           continue;
         }
         const geojson = await response.json();
-        
+        if (isStale()) { console.log('[TRIB] Load superseded — abortando', countryId); return; }
+
         // Verificar se é GeoJSON ou formato trib_*.json
         if (geojson.features && Array.isArray(geojson.features)) {
           // Formato GeoJSON
@@ -1738,24 +1784,34 @@ async function loadTribsForCountry(countryId) {
     
     // Carregar Santa Lucía apenas para UY (manter compatibilidade)
     if (countryId === 'UY') {
-      await loadSantaLucia();
+      await loadSantaLucia(myToken);
     }
-    
-    // Notificar subscribers
+    if (isStale()) { console.log('[TRIB] Load superseded — abortando', countryId); return; }
+
+    // Publica uma NOVA referência do array antes de notificar. Durante o load os itens
+    // são adicionados via push() na mesma referência; sem trocar o ref, useSyncExternalStore
+    // e os useMemo([tributaryLines]) não detectam a mudança (ficam presos no valor calculado
+    // quando o array ainda estava vazio — era o que zerava o heatmap de afluentes no RS).
+    // No UY isso era mascarado porque loadSantaLucia() reatribui _trib.data a um novo array.
+    _trib.data = _trib.data.slice();
     console.log('[TRIB] Notificando', _trib.subscribers.size, 'subscribers');
     _tribNotify();
     console.log('[TRIB] _trib.data.length após notificar:', _trib.data.length);
-    
+
   } catch (error) {
     console.error('[TRIB] Erro geral no carregamento:', error);
   } finally {
-    _trib.loading = false;
-    _tribNotify();
+    // Só o load mais recente reseta o estado/notifica (um load superseded não mexe no atual).
+    if (_trib.loadToken === myToken) {
+      _trib.loading = false;
+      _tribNotify();
+    }
   }
 }
 
 // Função separada para Santa Lucía (mantida para compatibilidade)
-async function loadSantaLucia() {
+// `token` = geração do load chamador; se outro load assumir nesse meio-tempo, não mutamos.
+async function loadSantaLucia(token) {
   try {
     const response = await fetch('/tributarios.geojson');
     if (!response.ok) return;
@@ -1788,11 +1844,12 @@ async function loadSantaLucia() {
         paths: f.geometry.coordinates.map(line => line.map(([lon, lat]) => [lat, lon]))
       }));
     
+    if (token != null && _trib.loadToken !== token) return; // load superseded — não mistura
     const fresh = fromRelations.filter(t => !_trib.seenIds.has(t.id));
     fresh.forEach(t => _trib.seenIds.add(t.id));
-    if (fresh.length) { 
-      _trib.data = [..._trib.data, ...fresh]; 
-      _tribNotify(); 
+    if (fresh.length) {
+      _trib.data = [..._trib.data, ...fresh];
+      _tribNotify();
     }
     
   } catch (error) {
@@ -2334,10 +2391,10 @@ const species = [
   { id: 'leporino', name: 'Trompa roja', namePt: 'Piau', nameEs: 'Leporino / Trompa roja', nameEn: 'Banded leporinus', scientificName: 'Leporinus lacustris', conservation: { status: 'regulated', minSize: 28, note: 'Tamanho mínimo recomendado: 28 cm. Espécie nativa dos grandes rios do Uruguai; não confundir com a boga (Megaleporinus obtusidens).' }, color: '#f59e0b', size: '18-35 cm', diet: 'frutos, sementes, algas, invertebrados e material vegetal', activity: 'diurna', habits: 'herbívoro-onívoro de rios de médio a grande porte; ocorre no Río Uruguay e afluentes maiores (Queguay, Daymán, Arapey); nada em cardumes perto de margens vegetadas e em corredeiras; identificado pelas faixas escuras transversais no corpo', preferences: { depth: 2.8, flow: 0.58, vegetation: 0.65, shade: 0.32, turbidity: 0.40, oxygen: 0.72, structure: 0.48, temperature: 21, solar: 50 } },
   { id: 'pachyurus', name: 'Corvina de río', namePt: 'Corvina-do-rio', nameEs: 'Corvina de río', nameEn: 'South American river croaker', scientificName: 'Pachyurus bonariensis', conservation: { status: 'regulated', minSize: 28, note: 'Tamanho mínimo recomendado: 28 cm. Espécie de água doce do Río de la Plata e Río Uruguay; diferente da corvina de rio (Plagioscion) e das corvinas costeiras.' }, color: '#818cf8', size: '20-45 cm', diet: 'peixes pequenos, crustáceos e insetos aquáticos', activity: 'noturna-crepuscular', habits: 'corvina exclusivamente de água doce; ocupa canais profundos do baixo Río Uruguay, Río de la Plata e o embalse do Río Negro; muito confundida com a corvina-de-rio (Plagioscion ternetzi) e com corvinas costeiras', preferences: { depth: 4.5, flow: 0.38, vegetation: 0.25, shade: 0.50, turbidity: 0.68, oxygen: 0.58, structure: 0.55, temperature: 18, solar: 10 } },
   // ── Espécies do RS — estuarina regulada + esportivos introduzidos ───────────
-  { id: 'bagre_marinho', name: 'Bagre de mar', namePt: 'Bagre-marinho', nameEs: 'Bagre de mar', nameEn: 'White sea catfish', scientificName: 'Genidens barbus', regions: ['UY', 'BR-RS', 'BR-SC'], conservation: { status: 'regulated', minSize: 35, note: 'Espécie estuarina sobre-explotada. Pesca regulada pela Resolução SEMA-RS 001/2018 (Lagoa dos Patos, Lago Guaíba e Bacia do Rio Tramandaí). Respeite tamanhos e períodos definidos para o estoque.' }, color: '#9ca3af', size: '30-90 cm', diet: 'crustáceos, moluscos e peixes de fundo estuarino', activity: 'noturna', habits: 'bagre estuarino-marinho que sobe à Lagoa dos Patos e ao Guaíba para reprodução; fundos lamosos de estuário e baixos rios; estoque sensível à sobrepesca', preferences: { depth: 4.0, flow: 0.30, vegetation: 0.18, shade: 0.45, turbidity: 0.72, oxygen: 0.55, structure: 0.50, temperature: 19, solar: 8 } },
-  { id: 'tilapia', name: 'Tilapia', namePt: 'Tilápia-do-nilo', nameEs: 'Tilapia', nameEn: 'Nile tilapia', scientificName: 'Oreochromis niloticus', regions: ['BR-RS', 'BR-SC'], conservation: { status: 'invasive', note: 'Espécie exótica invasora, muito comum em açudes, lagoas e reservatórios do RS. A soltura em novos ambientes é proibida e prejudica a fauna nativa.' }, color: '#65a30d', size: '20-45 cm', diet: 'onívora — algas, detritos, plâncton e invertebrados', activity: 'diurna', habits: 'exótica tolerante a águas paradas, quentes e de baixo oxigênio; abundante em açudes e reservatórios; reproduz-se intensamente', preferences: { depth: 1.8, flow: 0.20, vegetation: 0.70, shade: 0.45, turbidity: 0.58, oxygen: 0.40, structure: 0.55, temperature: 25, solar: 40 } },
-  { id: 'black_bass', name: 'Black bass', namePt: 'Black bass', nameEs: 'Perca americana', nameEn: 'Largemouth bass', scientificName: 'Micropterus salmoides', regions: ['BR-RS', 'BR-SC'], conservation: { status: 'invasive', note: 'Peixe esportivo exótico (introduzido), em reservatórios e açudes de água mais fria e limpa do RS. Não solte em novos ambientes aquáticos.' }, color: '#16a34a', size: '30-60 cm', diet: 'predador — peixes, anfíbios e crustáceos', activity: 'diurna-crepuscular', habits: 'exótico de emboscada associado a estruturas submersas e vegetação; prefere água limpa, mais fria e parada de açudes e represas', preferences: { depth: 3.0, flow: 0.18, vegetation: 0.72, shade: 0.62, turbidity: 0.30, oxygen: 0.70, structure: 0.85, temperature: 20, solar: 30 } },
-  { id: 'tucunare', name: 'Tucunaré', namePt: 'Tucunaré', nameEs: 'Tucunaré', nameEn: 'Peacock bass', scientificName: 'Cichla kelberi', regions: ['BR-RS'], conservation: { status: 'invasive', note: 'Ciclídeo predador exótico, introduzido em reservatórios mais quentes do RS. Não solte em novos ambientes — predador agressivo da fauna nativa.' }, color: '#f59e0b', size: '30-60 cm', diet: 'predador visual — peixes', activity: 'diurna', habits: 'exótico de emboscada perto de estruturas e margens; prefere água quente, parada e limpa de reservatórios; muito visual e territorial', preferences: { depth: 2.6, flow: 0.22, vegetation: 0.55, shade: 0.55, turbidity: 0.28, oxygen: 0.66, structure: 0.82, temperature: 26, solar: 38 } },
+  { id: 'bagre_marinho', name: 'Bagre de mar', namePt: 'Bagre-marinho', nameEs: 'Bagre de mar', nameEn: 'White sea catfish', scientificName: 'Genidens barbus', regions: ['UY', 'BR-RS', 'BR-SC', 'BR-PR'], conservation: { status: 'regulated', minSize: 35, note: 'Espécie estuarina sobre-explotada. Pesca regulada pela Resolução SEMA-RS 001/2018 (Lagoa dos Patos, Lago Guaíba e Bacia do Rio Tramandaí). Respeite tamanhos e períodos definidos para o estoque.' }, color: '#9ca3af', size: '30-90 cm', diet: 'crustáceos, moluscos e peixes de fundo estuarino', activity: 'noturna', habits: 'bagre estuarino-marinho que sobe à Lagoa dos Patos e ao Guaíba para reprodução; fundos lamosos de estuário e baixos rios; estoque sensível à sobrepesca', preferences: { depth: 4.0, flow: 0.30, vegetation: 0.18, shade: 0.45, turbidity: 0.72, oxygen: 0.55, structure: 0.50, temperature: 19, solar: 8 } },
+  { id: 'tilapia', name: 'Tilapia', namePt: 'Tilápia-do-nilo', nameEs: 'Tilapia', nameEn: 'Nile tilapia', scientificName: 'Oreochromis niloticus', regions: ['BR-RS', 'BR-SC', 'BR-PR'], conservation: { status: 'invasive', note: 'Espécie exótica invasora, muito comum em açudes, lagoas e reservatórios do RS. A soltura em novos ambientes é proibida e prejudica a fauna nativa.' }, color: '#65a30d', size: '20-45 cm', diet: 'onívora — algas, detritos, plâncton e invertebrados', activity: 'diurna', habits: 'exótica tolerante a águas paradas, quentes e de baixo oxigênio; abundante em açudes e reservatórios; reproduz-se intensamente', preferences: { depth: 1.8, flow: 0.20, vegetation: 0.70, shade: 0.45, turbidity: 0.58, oxygen: 0.40, structure: 0.55, temperature: 25, solar: 40 } },
+  { id: 'black_bass', name: 'Black bass', namePt: 'Black bass', nameEs: 'Perca americana', nameEn: 'Largemouth bass', scientificName: 'Micropterus salmoides', regions: ['BR-RS', 'BR-SC', 'BR-PR'], conservation: { status: 'invasive', note: 'Peixe esportivo exótico (introduzido), em reservatórios e açudes de água mais fria e limpa do RS. Não solte em novos ambientes aquáticos.' }, color: '#16a34a', size: '30-60 cm', diet: 'predador — peixes, anfíbios e crustáceos', activity: 'diurna-crepuscular', habits: 'exótico de emboscada associado a estruturas submersas e vegetação; prefere água limpa, mais fria e parada de açudes e represas', preferences: { depth: 3.0, flow: 0.18, vegetation: 0.72, shade: 0.62, turbidity: 0.30, oxygen: 0.70, structure: 0.85, temperature: 20, solar: 30 } },
+  { id: 'tucunare', name: 'Tucunaré', namePt: 'Tucunaré', nameEs: 'Tucunaré', nameEn: 'Peacock bass', scientificName: 'Cichla kelberi', regions: ['BR-RS', 'BR-PR'], conservation: { status: 'invasive', note: 'Ciclídeo predador exótico, introduzido em reservatórios mais quentes do RS. Não solte em novos ambientes — predador agressivo da fauna nativa.' }, color: '#f59e0b', size: '30-60 cm', diet: 'predador visual — peixes', activity: 'diurna', habits: 'exótico de emboscada perto de estruturas e margens; prefere água quente, parada e limpa de reservatórios; muito visual e territorial', preferences: { depth: 2.6, flow: 0.22, vegetation: 0.55, shade: 0.55, turbidity: 0.28, oxygen: 0.66, structure: 0.82, temperature: 26, solar: 38 } },
 ].sort((a, b) => a.name.localeCompare(b.name, 'pt'));
 
 function spName(sp, lang) {
@@ -2890,6 +2947,15 @@ const VEDAS = [
   { speciesId: 'manguruyu', region: ['BR-RS', 'BR-SC'], type: 'piracema', period: { start: [10, 1], end: [1, 31] }, authority: 'IBAMA IN 193/2008 (Bacia do Rio Uruguai)', note: 'Piracema (~1°/out a 31/jan, confirme a portaria): jaú é migratória e fica proibido no defeso.' },
   { speciesId: 'sabalito', region: ['BR-RS', 'BR-SC'], type: 'piracema', period: { start: [10, 1], end: [1, 31] }, authority: 'IBAMA IN 193/2008 (Bacia do Rio Uruguai)', note: 'Piracema (~1°/out a 31/jan, confirme a portaria): grumatã/curimbatá é migratória e fica proibida no defeso.' },
   { speciesId: 'boga', region: ['BR-RS', 'BR-SC'], type: 'piracema', period: { start: [10, 1], end: [1, 31] }, authority: 'IBAMA IN 193/2008 (Bacia do Rio Uruguai)', note: 'Piracema (~1°/out a 31/jan, confirme a portaria): piapara/boga é migratória e fica proibida no defeso.' },
+  // ── PR — Piracema da Bacia do Rio Paraná (IAT-PR / IBAMA): janela ~nov–fev, mais
+  //    ampla que a do Uruguai. As datas exatas mudam por portaria/decreto anual.
+  { speciesId: 'dourado', region: ['BR-PR'], type: 'piracema', period: { start: [11, 1], end: [2, 28] }, authority: 'Piracema da Bacia do Rio Paraná (IAT-PR / IBAMA — portaria anual)', note: 'Piracema da Bacia do Paraná (~1°/nov a 28/fev, confirme a portaria/decreto vigente): dourado é migratória e fica proibida no defeso.' },
+  { speciesId: 'surubí', region: ['BR-PR'], type: 'piracema', period: { start: [11, 1], end: [2, 28] }, authority: 'Piracema da Bacia do Rio Paraná (IAT-PR / IBAMA — portaria anual)', note: 'Piracema da Bacia do Paraná (~1°/nov a 28/fev, confirme a portaria): pintado/surubim é migratório e fica proibido no defeso.' },
+  { speciesId: 'pacu', region: ['BR-PR'], type: 'piracema', period: { start: [11, 1], end: [2, 28] }, authority: 'Piracema da Bacia do Rio Paraná (IAT-PR / IBAMA — portaria anual)', note: 'Piracema da Bacia do Paraná (~1°/nov a 28/fev, confirme a portaria): pacu é migratório e fica proibido no defeso.' },
+  { speciesId: 'manguruyu', region: ['BR-PR'], type: 'piracema', period: { start: [11, 1], end: [2, 28] }, authority: 'Piracema da Bacia do Rio Paraná (IAT-PR / IBAMA — portaria anual)', note: 'Piracema da Bacia do Paraná (~1°/nov a 28/fev, confirme a portaria): jaú é migratório e fica proibido no defeso.' },
+  { speciesId: 'pira_pita', region: ['BR-PR'], type: 'piracema', period: { start: [11, 1], end: [2, 28] }, authority: 'Piracema da Bacia do Rio Paraná (IAT-PR / IBAMA — portaria anual)', note: 'Piracema da Bacia do Paraná (~1°/nov a 28/fev, confirme a portaria): piracanjuba (pira-pitã) é migratória e fica proibida no defeso.' },
+  { speciesId: 'sabalito', region: ['BR-PR'], type: 'piracema', period: { start: [11, 1], end: [2, 28] }, authority: 'Piracema da Bacia do Rio Paraná (IAT-PR / IBAMA — portaria anual)', note: 'Piracema da Bacia do Paraná (~1°/nov a 28/fev, confirme a portaria): curimba/curimbatá é migratória e fica proibida no defeso.' },
+  { speciesId: 'boga', region: ['BR-PR'], type: 'piracema', period: { start: [11, 1], end: [2, 28] }, authority: 'Piracema da Bacia do Rio Paraná (IAT-PR / IBAMA — portaria anual)', note: 'Piracema da Bacia do Paraná (~1°/nov a 28/fev, confirme a portaria): piapara/boga é migratória e fica proibida no defeso.' },
   // Estuário (Lagoa dos Patos) — espécies reguladas (sem período fixo simples; ver portaria).
   { speciesId: 'lisa', region: 'BR-RS', type: 'regulada', authority: 'MMA IN 5/2004 · regras da safra (Lagoa dos Patos)', note: 'Tainha é espécie sobre-explotada (Anexo II, MMA IN 5/2004). A safra na Lagoa dos Patos é regulada por período e tamanho — confirme a portaria/safra vigente antes de pescar.' },
   { speciesId: 'bagre_marinho', region: 'BR-RS', type: 'regulada', authority: 'SEMA-RS Resolução 001/2018', note: 'Bagre-marinho (estuarino) com pesca regulada na Lagoa dos Patos, Lago Guaíba e Bacia do Rio Tramandaí (SEMA-RS Res. 001/2018): respeite tamanhos e períodos definidos para o estoque.' },
@@ -2901,6 +2967,7 @@ const VEDAS = [
 const FISHING_LAW_NOTE = {
   'BR-RS': 'No RS há regimes distintos por bacia: Piracema na Bacia do Rio Uruguai (~out–jan, IBAMA IN 193/2008) e defeso na Lagoa dos Patos/Guaíba acima de Arambaré (~nov–jan, IBAMA IN 197/2008). Tainha é sobre-explotada (MMA IN 5/2004) e o bagre tem regramento próprio (SEMA-RS Resolução 001/2018). Datas exatas mudam por portaria anual — confirme sempre a vigente antes de pescar.',
   'BR-SC': 'Em SC há dois regimes: no interior, Piracema na Bacia do Rio Uruguai (~out–jan, IBAMA IN 193/2008) protege as migratórias (dourado, surubim, pacu, jaú, grumatã); no litoral, a safra da tainha é regulada por portaria federal anual (Sul/Sudeste). Datas exatas mudam por portaria anual — confirme sempre a vigente antes de pescar.',
+  'BR-PR': 'No PR vale a Piracema da Bacia do Rio Paraná (~nov–fev), que proíbe a pesca das migratórias (dourado, pintado/surubim, pacu, jaú, piracanjuba, curimba, piapara) no período reprodutivo. É regulada por portaria/decreto anual do IAT-PR e pelo IBAMA, com regras de petrechos e cotas. Datas exatas mudam a cada ano — confirme sempre a portaria vigente antes de pescar.',
   'UY': 'Calendário baseado em CARU Res. 59/12 e DINARA Decreto 149/997. Verifique sempre a legislação vigente.',
 };
 
@@ -3716,6 +3783,36 @@ function smoothProbabilityColor(probability) {
   return intensityColor('#ef4444', probability);
 }
 
+// === Paletas do heatmap de espécies (t ∈ 0..1) ===========================
+// 'thermal': mapa de calor clássico azul→ciano→verde→amarelo→laranja→vermelho.
+// 'species': mantém a cor da espécie como identidade, mas com muito mais
+//            dinâmica (escuro-frio → cor cheia → quase-branco brilhante).
+const _THERMAL_STOPS = [[0,[37,99,235]],[0.2,[6,182,212]],[0.45,[34,197,94]],[0.65,[234,179,8]],[0.82,[249,115,22]],[1,[239,68,68]]];
+function _thermalColor(t) { const [r,g,b] = _envColor(_THERMAL_STOPS, clamp(t, 0, 1)); return `rgb(${r},${g},${b})`; }
+function _speciesHeatColor(baseHex, t) {
+  const { h } = hexToHsl(baseHex);
+  t = clamp(t, 0, 1);
+  const s = 45 + t * 45;          // 45 → 90: cor ganha saturação ao subir
+  const l = 24 + Math.pow(t, 0.85) * 68; // 24 → 92: escuro (baixo) → claro/brilho (alto)
+  return hslToHex(h, s, l);
+}
+function heatColor(palette, baseHex, t) {
+  return palette === 'thermal' ? _thermalColor(t) : _speciesHeatColor(baseHex, t);
+}
+// t∈0..1 do heatmap: mistura a posição RELATIVA no rio (realça o contraste local)
+// com a probabilidade ABSOLUTA (evita que um rio uniformemente baixo "invente" um
+// ponto quente — agora ele fica frio de verdade).
+function heatT(prob, minP, span) {
+  const rel = (prob - minP) / (span || 1);
+  const abs = prob / 100;
+  return clamp(rel * 0.55 + abs * 0.45, 0, 1);
+}
+// Rampa CSS para a legenda (pré-calculada em 7 paradas).
+function heatGradientCss(palette, baseHex) {
+  const stops = [0, 0.17, 0.34, 0.5, 0.67, 0.84, 1];
+  return `linear-gradient(90deg, ${stops.map(s => heatColor(palette, baseHex, s)).join(', ')})`;
+}
+
 // helper: gera polígono hexagonal aproximado a partir de centro e raio em graus
 function approxHexPoly(lat, lon, latR, lonR, n = 8) {
   return Array.from({ length: n }, (_, i) => {
@@ -4342,7 +4439,11 @@ function App() {
   const [showSnapAreas, setShowSnapAreas] = useState(true);
   const [protectedAreas, setProtectedAreas] = useState([]); // áreas carregadas por país (RS=UCs ICMBio)
   const [showWatercourses, setShowWatercourses] = useState(true);
-  const [activeBasins, setActiveBasins] = useState(() => allBasinIds(loadSavedCountry() || 'UY')); // bacias visíveis (inicial = todas)
+  // Bacias visíveis. Restaura a seleção salva (sobrevive a remontagem/reload); default = todas.
+  const [activeBasins, setActiveBasins] = useState(() => {
+    const c = loadSavedCountry() || 'UY';
+    return loadSavedBasins(c) || allBasinIds(c);
+  });
   
     const [basinDropdownOpen, setBasinDropdownOpen] = useState(false);
   const [showFishingSpots, setShowFishingSpots] = useState(true);
@@ -4355,6 +4456,18 @@ function App() {
   const [envMenuOpen, setEnvMenuOpen] = useState(false);
   const [envTime, setEnvTime] = useState(0); // índice da hora no slider de tempo
   const [riverColorBy, setRiverColorBy] = useState('basin'); // 'basin' | 'order' (vazão/porte)
+  // Paleta do heatmap de espécies: 'thermal' (azul→vermelho) | 'species' (tom da espécie). Persistida.
+  const [heatPalette, setHeatPalette] = useState(() => { try { return localStorage.getItem('pescamon_heatpalette') || 'thermal'; } catch { return 'thermal'; } });
+  useEffect(() => { try { localStorage.setItem('pescamon_heatpalette', heatPalette); } catch {} }, [heatPalette]);
+  // Slider de tempo do heatmap: série climática horária (48h) que re-scora a probabilidade por hora.
+  const [heatHourly, setHeatHourly] = useState(null);   // { scenarios: [...], nowIdx } | null
+  const [heatTime, setHeatTime] = useState(0);          // índice da hora no slider
+  const [heatTimeOn, setHeatTimeOn] = useState(false);  // modo tempo ligado?
+  const [heatHourlyLoading, setHeatHourlyLoading] = useState(false);
+  // Vazão dinâmica GloFAS (modo riverColorBy='discharge'): { riverKey: { discharge, mean, ratio } }
+  const [dischargeByRiver, setDischargeByRiver] = useState({});
+  const [dischargeLoading, setDischargeLoading] = useState(false);
+  const dischargeCacheRef = useRef({}); // country -> mapa (não refaz a busca por país)
   const [spotModal, setSpotModal] = useState(null); // null | { lat, lng } | { spot } (view mode)
   const [spotForm, setSpotForm] = useState({ name: '', description: '', access_type: 'bank', species_ids: [], species_names: [] });
   const [spotSaving, setSpotSaving] = useState(false);
@@ -4378,6 +4491,43 @@ function App() {
       .finally(() => { if (!cancelled) setEnvLoading(false); });
     return () => { cancelled = true; };
   }, [envLayer, selectedCountry]);
+  // Busca a série climática horária quando o modo tempo do heatmap é ligado (ou troca de país).
+  useEffect(() => {
+    if (!heatTimeOn) return;
+    let cancelled = false;
+    setHeatHourlyLoading(true);
+    fetchHeatHourly(selectedCountry)
+      .then(r => { if (!cancelled) { setHeatHourly(r); if (r) setHeatTime(r.nowIdx ?? 0); } })
+      .catch(() => { if (!cancelled) setHeatHourly(null); })
+      .finally(() => { if (!cancelled) setHeatHourlyLoading(false); });
+    return () => { cancelled = true; };
+  }, [heatTimeOn, selectedCountry]);
+  // Rios-tronco (ordem alta) agrupados, com pontos amostra p/ snap GloFAS. Só no modo vazão.
+  const dischargeRivers = useMemo(() => {
+    if (riverColorBy !== 'discharge' || !tributaryLines.length) return [];
+    const groups = new Map();
+    for (const t of tributaryLines) {
+      if ((t.order ?? 0) < 6) continue; // só troncos: GloFAS não resolve cabeceiras
+      const key = riverGroupKey(t.name, t.regionId, t.id);
+      let g = groups.get(key);
+      if (!g) { g = { key, pts: [] }; groups.set(key, g); }
+      for (const path of t.paths) { const mid = path[Math.floor(path.length / 2)]; if (mid) g.pts.push(mid); }
+    }
+    const pick = (a, n) => (a.length <= n ? a : Array.from({ length: n }, (_, i) => a[Math.round(i * (a.length - 1) / (n - 1))]));
+    return [...groups.values()].map(g => ({ key: g.key, pts: pick(g.pts, 4) }));
+  }, [riverColorBy, tributaryLines]);
+  // Busca a vazão GloFAS quando o modo vazão é ligado (cacheada por país).
+  useEffect(() => {
+    if (riverColorBy !== 'discharge' || !dischargeRivers.length) return;
+    if (dischargeCacheRef.current[selectedCountry]) { setDischargeByRiver(dischargeCacheRef.current[selectedCountry]); return; }
+    let cancelled = false;
+    setDischargeLoading(true);
+    fetchRiverDischarges(dischargeRivers)
+      .then(map => { if (!cancelled) { dischargeCacheRef.current[selectedCountry] = map; setDischargeByRiver(map); } })
+      .catch(() => { if (!cancelled) setDischargeByRiver({}); })
+      .finally(() => { if (!cancelled) setDischargeLoading(false); });
+    return () => { cancelled = true; };
+  }, [riverColorBy, dischargeRivers, selectedCountry]);
   // Seletor geográfico (mapa país→estado). Abre só quando não há região salva.
   const [pickerOpen, setPickerOpen] = useState(() => !loadSavedCountry());
   const handlePickRegion = useCallback((regionId) => {
@@ -4385,9 +4535,11 @@ function App() {
     saveCountry(regionId);
     setSelectedWatercourseIds([]);
     setSelectedRegion(null);
-    setActiveBasins(allBasinIds(regionId));
+    setActiveBasins(loadSavedBasins(regionId) || allBasinIds(regionId));
     setPickerOpen(false);
   }, []);
+  // Persiste a seleção de bacias por país, p/ sobreviver a reload/remontagem do App.
+  useEffect(() => { saveBasins(selectedCountry, activeBasins); }, [selectedCountry, activeBasins]);
   const [userLocation, setUserLocation] = useState(null);
   const [mapCenter, setMapCenter] = useState([-34.735, -56.275]);
   const [mapZoom] = useState(8);
@@ -4536,7 +4688,7 @@ function App() {
   // Áreas de preservação carregadas por país (RS = UCs oficiais ICMBio; UY usa SNAP_AREAS
   // inline). Para uma região nova, basta gerar public/protected_areas_<uf>.json + a entrada aqui.
   useEffect(() => {
-    const files = { 'BR-RS': 'protected_areas_rs.json', 'BR-SC': 'protected_areas_sc.json' };
+    const files = { 'BR-RS': 'protected_areas_rs.json', 'BR-SC': 'protected_areas_sc.json', 'BR-PR': 'protected_areas_pr.json' };
     const file = files[selectedCountry];
     if (!file) { setProtectedAreas([]); return; }
     let cancelled = false;
@@ -4687,6 +4839,10 @@ function App() {
   const selectedSpecies = species.find((item) => item.id === selectedSpeciesId) || species[0];
   const selectedSpeciesList = selectedSpeciesIds.map((id) => species.find((s) => s.id === id)).filter(Boolean);
   const selectedClimate = climateScenarios.find((item) => item.id === selectedClimateId) || climateScenarios[0];
+  // Clima efetivo que alimenta o SCORING do heatmap: no modo tempo, usa a hora do slider
+  // (re-score por hora); senão, o cenário selecionado. useDeferredValue mantém o arraste fluido.
+  const deferredHeatTime = React.useDeferredValue(heatTime);
+  const effectiveClimate = (heatTimeOn && heatHourly?.scenarios?.[deferredHeatTime]) || selectedClimate;
 
   function toggleSpecies(id) {
     setSelectedSpeciesIds((prev) => {
@@ -5038,6 +5194,15 @@ function App() {
     const selectedTribNames = new Set(
       tributaryLines.filter((t) => selectedWatercourseIdsSet.has(t.id)).map((t) => t.name)
     );
+    // Estados BR: o seletor agrupa trechos por nome e usa ids compostos
+    // `${país}:${regionId}:${nome}` — então casamos pelo nome extraído do id, já que
+    // segment.tributaryName guarda o nome bruto (= nome do grupo).
+    if (/^BR-/.test(selectedCountry)) {
+      for (const id of selectedWatercourseIds) {
+        const parts = String(id).split(':');
+        if (parts.length >= 3 && parts[0] === selectedCountry) selectedTribNames.add(parts.slice(2).join(':'));
+      }
+    }
     return tributarySegments
       .filter((segment) => selectedTribNames.has(segment.tributaryName))
       .map((segment) => {
@@ -5048,9 +5213,9 @@ function App() {
           const bonus = calibrationBonus(speciesOccurrences);
           
           // Usar ensemble específico para afluentes se disponível
-          const tributaryEnsembleProb = predictEnsemble(tributaryEnsembleModels[spId], segment.center, selectedClimate);
-          const mainEnsembleProb = predictEnsemble(ensembleModels[spId], segment.center, selectedClimate);
-          const heuristicScore = calculateProbability(segment, sp, selectedClimate, speciesOccurrences, dischargeData);
+          const tributaryEnsembleProb = predictEnsemble(tributaryEnsembleModels[spId], segment.center, effectiveClimate);
+          const mainEnsembleProb = predictEnsemble(ensembleModels[spId], segment.center, effectiveClimate);
+          const heuristicScore = calculateProbability(segment, sp, effectiveClimate, speciesOccurrences, dischargeData);
           
           // Prioridade: ensemble de afluentes > ensemble principal > heurística
           let prob;
@@ -5067,7 +5232,7 @@ function App() {
         const probability = Math.round(totalProb / activeIds.length);
         return { ...segment, probability: isNaN(probability) ? 0 : probability };
       });
-  }, [tributarySegments, selectedSpecies, selectedSpeciesList, selectedClimate, occurrences, selectedSpeciesIds, ensembleModels, tributaryEnsembleModels, dischargeData, selectedWatercourseIds]);
+  }, [tributarySegments, selectedSpecies, selectedSpeciesList, effectiveClimate, occurrences, selectedSpeciesIds, ensembleModels, tributaryEnsembleModels, dischargeData, selectedWatercourseIds, selectedCountry]);
 
   // Heatmap para EXTRA_RIVERS selecionados (Rio Negro, Uruguay, etc.)
   const scoredExtraRiverSegments = useMemo(() => {
@@ -5087,8 +5252,8 @@ function App() {
           const sp = species.find(s => s.id === spId);
           const speciesOccurrences = countOccurrencesInCell(segment, spId);
           const bonus = calibrationBonus(speciesOccurrences);
-          const ensembleProb = predictEnsemble(ensembleModels[spId], segment.center, selectedClimate);
-          const heuristicScore = calculateProbability(segment, sp, selectedClimate, speciesOccurrences, dischargeData);
+          const ensembleProb = predictEnsemble(ensembleModels[spId], segment.center, effectiveClimate);
+          const heuristicScore = calculateProbability(segment, sp, effectiveClimate, speciesOccurrences, dischargeData);
           const prob = ensembleProb !== null ? ensembleProb * 0.6 + heuristicScore * 0.4 : heuristicScore;
           totalProb += prob + bonus;
         }
@@ -5097,7 +5262,7 @@ function App() {
       }
     }
     return result;
-  }, [extraRiverGeometries, selectedSpeciesIds, selectedClimate, occurrences, ensembleModels, dischargeData, selectedWatercourseIds]);
+  }, [extraRiverGeometries, selectedSpeciesIds, effectiveClimate, occurrences, ensembleModels, dischargeData, selectedWatercourseIds]);
 
   // Busca dados reais de qualidade da água quando tributários são carregados
   useEffect(() => {
@@ -5301,7 +5466,7 @@ function App() {
   const availableSpecies = useMemo(() => {
     // Filtra por país: espécie sem `regions` = compartilhada (UY + estados do Cone Sul);
     // exóticos/regionais declaram `regions` próprias.
-    const inCountry = (s) => (s.regions || ['UY', 'BR-RS', 'BR-SC']).includes(selectedCountry);
+    const inCountry = (s) => (s.regions || ['UY', 'BR-RS', 'BR-SC', 'BR-PR']).includes(selectedCountry);
     const base = species.filter(inCountry);
     if (selectedWatercourses.length === 0) return base;
     const allowed = new Set(selectedWatercourses.flatMap((w) => SPECIES_BY_WATERCOURSE[w.type] || []));
@@ -5332,7 +5497,7 @@ function App() {
             const em = ensembleModels[spId] || null;
             const speciesOccurrences = countOccurrencesInCell(segment, spId);
             const bonus = calibrationBonus(speciesOccurrences);
-            const heuristicScore = calculateProbability(segment, sp, selectedClimate, speciesOccurrences, dischargeData);
+            const heuristicScore = calculateProbability(segment, sp, effectiveClimate, speciesOccurrences, dischargeData);
             const ensemblePrediction = predictEnsemble(em, segment);
 
             let finalProbability;
@@ -5376,7 +5541,7 @@ function App() {
         })
         .sort((a, b) => b.probability - a.probability);
     },
-    [riverSegments, selectedSpecies, selectedSpeciesList, selectedClimate, occurrences, selectedSpeciesIds, ensembleModels, dischargeData, selectedWatercourseIds]
+    [riverSegments, selectedSpecies, selectedSpeciesList, effectiveClimate, occurrences, selectedSpeciesIds, ensembleModels, dischargeData, selectedWatercourseIds]
   );
 
   const probRange = useMemo(() => {
@@ -5509,23 +5674,25 @@ function App() {
     const riverWidthM = 60;
 
     return scoredSegments.map((cell) => {
-      const normalized = ((cell.probability - probRange.min) / probRange.span) * 100;
-      const color = intensityColor(activeColor, normalized);
-      const baseOpacity = 0.25 + (normalized / 100) * 0.55;
+      const tt = heatT(cell.probability, probRange.min, probRange.span);
+      const color = heatColor(heatPalette, activeColor, tt);
+      const baseOpacity = 0.30 + tt * 0.60;
 
       return {
         id: cell.id,
         bands: [
-          { path: offsetPolyline(cell.path, -riverWidthM), weight: 10, opacity: baseOpacity * profile.bank },
-          { path: offsetPolyline(cell.path, -riverWidthM * 0.5), weight: 12, opacity: baseOpacity * profile.midBank },
-          { path: cell.path, weight: 14, opacity: baseOpacity * profile.center },
-          { path: offsetPolyline(cell.path, riverWidthM * 0.5), weight: 12, opacity: baseOpacity * profile.midBank },
-          { path: offsetPolyline(cell.path, riverWidthM), weight: 10, opacity: baseOpacity * profile.bank }
+          // halo largo e bem fraco → brilho suave em vez de faixas chapadas
+          { path: cell.path, weight: 28, opacity: baseOpacity * 0.16 },
+          { path: offsetPolyline(cell.path, -riverWidthM), weight: 9, opacity: baseOpacity * profile.bank },
+          { path: offsetPolyline(cell.path, -riverWidthM * 0.5), weight: 11, opacity: baseOpacity * profile.midBank },
+          { path: cell.path, weight: 13, opacity: baseOpacity * profile.center },
+          { path: offsetPolyline(cell.path, riverWidthM * 0.5), weight: 11, opacity: baseOpacity * profile.midBank },
+          { path: offsetPolyline(cell.path, riverWidthM), weight: 9, opacity: baseOpacity * profile.bank }
         ],
         color
       };
     });
-  }, [scoredSegments, selectedSpecies, probRange, activeColor]);
+  }, [scoredSegments, selectedSpecies, probRange, activeColor, heatPalette]);
 
   const tributaryBands = useMemo(() => {
     if (!heatmapActive || scoredTributarySegments.length === 0) return [];
@@ -5533,24 +5700,33 @@ function App() {
     const allProbs = scoredTributarySegments.map(s => s.probability);
     const minP = Math.min(...allProbs);
     const spanP = (Math.max(...allProbs) - minP) || 1;
-    return scoredTributarySegments.map((seg) => {
-      const normalized = (seg.probability - minP) / spanP * 100;
-      const color = intensityColor(activeColor, normalized);
-      const baseOpacity = 0.25 + (normalized / 100) * 0.55;
+    // Teto de segurança: selecionar uma bacia inteira do RS pode gerar dezenas de milhares
+    // de segmentos (×6 polylines cada). Acima do teto, renderiza só os de maior probabilidade
+    // (que é o que o heatmap quer destacar) para não travar o navegador.
+    const HEATMAP_BAND_CAP = 2500;
+    const segsToRender = scoredTributarySegments.length > HEATMAP_BAND_CAP
+      ? [...scoredTributarySegments].sort((a, b) => b.probability - a.probability).slice(0, HEATMAP_BAND_CAP)
+      : scoredTributarySegments;
+    return segsToRender.map((seg) => {
+      const tt = heatT(seg.probability, minP, spanP);
+      const color = heatColor(heatPalette, activeColor, tt);
+      const baseOpacity = 0.30 + tt * 0.60;
       const w = 30; // afluentes são mais estreitos que o rio principal
+      const corePath = seg.path.length >= 2 ? seg.path : [seg.center, seg.center];
       return {
         id: seg.id, color,
         popup: { name: seg.tributaryName, probability: seg.probability, seg },
         bands: [
-          { path: offsetPolyline(seg.path, -w), weight: 7, opacity: baseOpacity * profile.bank },
-          { path: offsetPolyline(seg.path, -w * 0.5), weight: 9, opacity: baseOpacity * profile.midBank },
-          { path: seg.path.length >= 2 ? seg.path : [seg.center, seg.center], weight: 10, opacity: baseOpacity * profile.center },
-          { path: offsetPolyline(seg.path, w * 0.5), weight: 9, opacity: baseOpacity * profile.midBank },
-          { path: offsetPolyline(seg.path, w), weight: 7, opacity: baseOpacity * profile.bank },
+          { path: corePath, weight: 18, opacity: baseOpacity * 0.16 }, // halo glow
+          { path: offsetPolyline(seg.path, -w), weight: 6, opacity: baseOpacity * profile.bank },
+          { path: offsetPolyline(seg.path, -w * 0.5), weight: 8, opacity: baseOpacity * profile.midBank },
+          { path: corePath, weight: 10, opacity: baseOpacity * profile.center, core: true },
+          { path: offsetPolyline(seg.path, w * 0.5), weight: 8, opacity: baseOpacity * profile.midBank },
+          { path: offsetPolyline(seg.path, w), weight: 6, opacity: baseOpacity * profile.bank },
         ],
       };
     });
-  }, [scoredTributarySegments, selectedSpecies, activeColor, heatmapActive]);
+  }, [scoredTributarySegments, selectedSpecies, activeColor, heatmapActive, heatPalette]);
 
   const extraRiverBands = useMemo(() => {
     if (!heatmapActive || scoredExtraRiverSegments.length === 0) return [];
@@ -5559,23 +5735,25 @@ function App() {
     const minP = Math.min(...allProbs);
     const spanP = (Math.max(...allProbs) - minP) || 1;
     return scoredExtraRiverSegments.map((seg) => {
-      const normalized = (seg.probability - minP) / spanP * 100;
-      const color = intensityColor(activeColor, normalized);
-      const baseOpacity = 0.25 + (normalized / 100) * 0.55;
+      const tt = heatT(seg.probability, minP, spanP);
+      const color = heatColor(heatPalette, activeColor, tt);
+      const baseOpacity = 0.30 + tt * 0.60;
       const w = 50;
+      const corePath = seg.path.length >= 2 ? seg.path : [seg.center, seg.center];
       return {
         id: seg.id, color,
         popup: { name: seg.riverName, probability: seg.probability },
         bands: [
-          { path: offsetPolyline(seg.path, -w), weight: 9, opacity: baseOpacity * profile.bank },
-          { path: offsetPolyline(seg.path, -w * 0.5), weight: 11, opacity: baseOpacity * profile.midBank },
-          { path: seg.path.length >= 2 ? seg.path : [seg.center, seg.center], weight: 13, opacity: baseOpacity * profile.center },
-          { path: offsetPolyline(seg.path, w * 0.5), weight: 11, opacity: baseOpacity * profile.midBank },
-          { path: offsetPolyline(seg.path, w), weight: 9, opacity: baseOpacity * profile.bank },
+          { path: corePath, weight: 30, opacity: baseOpacity * 0.16 }, // halo glow
+          { path: offsetPolyline(seg.path, -w), weight: 8, opacity: baseOpacity * profile.bank },
+          { path: offsetPolyline(seg.path, -w * 0.5), weight: 10, opacity: baseOpacity * profile.midBank },
+          { path: corePath, weight: 12, opacity: baseOpacity * profile.center, core: true },
+          { path: offsetPolyline(seg.path, w * 0.5), weight: 10, opacity: baseOpacity * profile.midBank },
+          { path: offsetPolyline(seg.path, w), weight: 8, opacity: baseOpacity * profile.bank },
         ],
       };
     });
-  }, [scoredExtraRiverSegments, selectedSpecies, activeColor, heatmapActive]);
+  }, [scoredExtraRiverSegments, selectedSpecies, activeColor, heatmapActive, heatPalette]);
 
   const heatmapData = useMemo(() => {
     if (riverSegments.length === 0) return [];
@@ -6332,11 +6510,11 @@ function App() {
             <div style={{ position: 'relative' }}>
               <button
                 type="button"
-                className={`map-toggle-btn${(envLayer || riverColorBy === 'order') ? ' active' : ''}`}
+                className={`map-toggle-btn${(envLayer || riverColorBy !== 'basin') ? ' active' : ''}`}
                 onClick={() => setEnvMenuOpen((v) => !v)}
                 title="Camadas ambientais (Open-Meteo)"
               >
-                <ThermometerSun size={13} /> {envLayer ? `${ENV_LAYERS[envLayer].emoji} ${ENV_LAYERS[envLayer].label}` : (riverColorBy === 'order' ? '🌊 Porte' : 'Ambiente')}{envLoading ? '…' : ''} <ChevronDown size={11} style={{ opacity: 0.6 }} />
+                <ThermometerSun size={13} /> {envLayer ? `${ENV_LAYERS[envLayer].emoji} ${ENV_LAYERS[envLayer].label}` : (riverColorBy === 'order' ? '🌊 Porte' : riverColorBy === 'discharge' ? `💧 Vazão${dischargeLoading ? '…' : ''}` : 'Ambiente')}{envLoading ? '…' : ''} <ChevronDown size={11} style={{ opacity: 0.6 }} />
               </button>
               {envMenuOpen && (
                 <div style={{ position: 'absolute', top: 'calc(100% + 4px)', left: 0, zIndex: 1500, background: 'var(--bg-surface)', border: '1px solid var(--border-faint2)', borderRadius: 8, overflow: 'hidden', boxShadow: 'var(--shadow-modal)', minWidth: 160 }}>
@@ -6355,7 +6533,12 @@ function App() {
                   <button type="button"
                     onClick={() => { setRiverColorBy(v => v === 'order' ? 'basin' : 'order'); setEnvMenuOpen(false); }}
                     style={{ width: '100%', textAlign: 'left', padding: '8px 11px', background: riverColorBy === 'order' ? 'rgba(59,130,246,0.16)' : 'transparent', border: 'none', color: riverColorBy === 'order' ? '#60a5fa' : 'var(--text-primary)', cursor: 'pointer', fontSize: '0.8rem', fontWeight: riverColorBy === 'order' ? 700 : 400 }}>
-                    🌊 Porte/vazão {riverColorBy === 'order' ? '✓' : ''}
+                    🌊 Porte (ordem) {riverColorBy === 'order' ? '✓' : ''}
+                  </button>
+                  <button type="button"
+                    onClick={() => { setRiverColorBy(v => v === 'discharge' ? 'basin' : 'discharge'); setEnvMenuOpen(false); }}
+                    style={{ width: '100%', textAlign: 'left', padding: '8px 11px', background: riverColorBy === 'discharge' ? 'rgba(59,130,246,0.16)' : 'transparent', border: 'none', color: riverColorBy === 'discharge' ? '#60a5fa' : 'var(--text-primary)', cursor: 'pointer', fontSize: '0.8rem', fontWeight: riverColorBy === 'discharge' ? 700 : 400 }}>
+                    💧 Vazão (GloFAS) {riverColorBy === 'discharge' ? '✓' : ''}
                   </button>
                 </div>
               )}
@@ -6373,6 +6556,7 @@ function App() {
 
           {/* Camada ambiental — sob os rios, não-interativa */}
           {envLayer && envGrid && <EnvCanvasLayer grid={envGrid} timeIndex={envTime} />}
+          {envLayer === 'wind' && envGrid && <WindParticlesLayer grid={envGrid} timeIndex={envTime} />}
 
           {/* IoT Sensors Layer */}
           {iotSensors.map(sensor => (
@@ -6583,6 +6767,7 @@ function App() {
             activeBasins={activeBasins}
             selectedCountry={selectedCountry}
             colorBy={riverColorBy}
+            dischargeByRiver={dischargeByRiver}
           />}
 
           {/* Rios e lagoas extras (overlays herói legados) — desativados: a rede oficial
@@ -6760,7 +6945,7 @@ function App() {
           {heatmapActive && extraRiverBands.map((seg) => (
             <React.Fragment key={`erb-${seg.id}`}>
               {seg.bands.map((band, bi) => (
-                bi === 2
+                band.core
                   ? <Polyline key={bi} positions={band.path} pathOptions={{ color: seg.color, weight: band.weight, opacity: band.opacity, lineCap: 'round', lineJoin: 'round' }}>
                       <Popup>
                         <div style={{minWidth: 180, maxWidth: 220}}>
@@ -6776,7 +6961,7 @@ function App() {
           {heatmapActive && tributaryBands.map((seg) => (
             <React.Fragment key={`tb-${seg.id}`}>
               {seg.bands.map((band, bi) => (
-                bi === 2
+                band.core
                   ? <Polyline key={bi} positions={band.path} pathOptions={{ color: seg.color, weight: band.weight, opacity: band.opacity, lineCap: 'round', lineJoin: 'round' }}>
                       <Popup>
                         <div style={{minWidth: 180, maxWidth: 220}}>
@@ -6939,7 +7124,7 @@ function App() {
                 <div style={{ flex:1, height:10, borderRadius:5, background: _envGradientCss(ENV_LAYERS[envLayer]) }} />
                 <span style={{ fontSize:'0.62rem', color:'#94a3b8' }}>{ENV_LAYERS[envLayer].domain[1]} {ENV_LAYERS[envLayer].unit}</span>
               </div>
-              {envLayer === 'wind' && <div style={{ fontSize:'0.6rem', color:'#64748b', marginTop:3 }}>setas = direção do vento</div>}
+              {envLayer === 'wind' && <div style={{ fontSize:'0.6rem', color:'#64748b', marginTop:3 }}>partículas animadas = direção/força do vento</div>}
               {envGrid?.times?.length > 1 && (
                 <div style={{ marginTop:7 }}>
                   <input type="range" min={0} max={envGrid.times.length - 1}
@@ -6958,14 +7143,79 @@ function App() {
               <div style={{ fontSize:'0.7rem', color:'#cbd5e1', marginBottom:5, fontWeight:600 }}>🌊 Porte do rio (vazão relativa)</div>
               <div style={{ display:'flex', alignItems:'center', gap:6 }}>
                 <span style={{ fontSize:'0.62rem', color:'#94a3b8' }}>cabeceira</span>
-                <div style={{ width:120, height:10, borderRadius:5, background:'linear-gradient(90deg, rgb(125,211,252), rgb(56,189,248), rgb(14,165,233), rgb(37,99,235), rgb(30,58,138))' }} />
+                <div style={{ width:120, height:10, borderRadius:5, background:'linear-gradient(90deg, rgb(71,85,105), rgb(37,99,235), rgb(14,165,233), rgb(45,212,191), rgb(165,243,252), rgb(236,254,255))' }} />
                 <span style={{ fontSize:'0.62rem', color:'#94a3b8' }}>tronco</span>
+              </div>
+              <div style={{ fontSize:'0.58rem', color:'#64748b', marginTop:4 }}>linha mais grossa/clara = maior porte</div>
+            </div>
+          )}
+          {riverColorBy === 'discharge' && (
+            <div style={{ position:'absolute', left:10, bottom: envLayer ? 84 : 26, zIndex:1000, background:'rgba(15,23,42,0.86)', border:'1px solid rgba(255,255,255,0.12)', borderRadius:8, padding:'7px 10px', pointerEvents:'none' }}>
+              <div style={{ fontSize:'0.7rem', color:'#cbd5e1', marginBottom:5, fontWeight:600 }}>💧 Vazão dos troncos (GloFAS){dischargeLoading ? ' · carregando…' : ''}</div>
+              <div style={{ display:'flex', alignItems:'center', gap:6 }}>
+                <span style={{ fontSize:'0.62rem', color:'#94a3b8' }}>seca</span>
+                <div style={{ width:120, height:10, borderRadius:5, background:'linear-gradient(90deg, rgb(239,68,68), rgb(249,115,22), rgb(34,211,238), rgb(59,130,246), rgb(37,99,235))' }} />
+                <span style={{ fontSize:'0.62rem', color:'#94a3b8' }}>cheia</span>
+              </div>
+              <div style={{ fontSize:'0.58rem', color:'#64748b', marginTop:4 }}>cor = vazão atual ÷ média do mês · só rios grandes</div>
+            </div>
+          )}
+          {heatmapActive && (
+            <div style={{ position:'absolute', left:10, bottom: riverColorBy === 'order' ? (envLayer ? 150 : 92) : (envLayer ? 84 : 26), zIndex:1000, background:'rgba(15,23,42,0.88)', border:'1px solid rgba(255,255,255,0.12)', borderRadius:8, padding:'7px 10px' }}>
+              <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:10, marginBottom:5 }}>
+                <span style={{ fontSize:'0.7rem', color:'#cbd5e1', fontWeight:600 }}>🎣 Probabilidade de captura</span>
+                <div style={{ display:'flex', gap:0, border:'1px solid rgba(255,255,255,0.16)', borderRadius:6, overflow:'hidden' }}>
+                  {[['thermal','Térmica'],['species','Espécie']].map(([val,label]) => (
+                    <button key={val} type="button" onClick={() => setHeatPalette(val)}
+                      style={{ padding:'2px 7px', fontSize:'0.6rem', fontWeight:700, cursor:'pointer', border:'none',
+                        background: heatPalette === val ? 'rgba(56,189,248,0.25)' : 'transparent',
+                        color: heatPalette === val ? '#7dd3fc' : '#94a3b8' }}>{label}</button>
+                  ))}
+                </div>
+              </div>
+              <div style={{ display:'flex', alignItems:'center', gap:6 }}>
+                <span style={{ fontSize:'0.62rem', color:'#94a3b8' }}>baixa</span>
+                <div style={{ width:130, height:10, borderRadius:5, background: heatGradientCss(heatPalette, activeColor) }} />
+                <span style={{ fontSize:'0.62rem', color:'#94a3b8' }}>alta</span>
+              </div>
+              {/* Slider de tempo: re-scora o heatmap hora a hora (previsão 48h) */}
+              <div style={{ marginTop:7, borderTop:'1px solid rgba(255,255,255,0.08)', paddingTop:6 }}>
+                <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:8 }}>
+                  <button type="button" onClick={() => setHeatTimeOn(v => !v)}
+                    style={{ display:'flex', alignItems:'center', gap:4, padding:'2px 7px', fontSize:'0.6rem', fontWeight:700, cursor:'pointer', borderRadius:6,
+                      border:'1px solid rgba(255,255,255,0.16)',
+                      background: heatTimeOn ? 'rgba(56,189,248,0.25)' : 'transparent',
+                      color: heatTimeOn ? '#7dd3fc' : '#94a3b8' }}>⏱ Hora · {heatTimeOn ? 'on' : 'off'}</button>
+                  {heatTimeOn && heatHourly?.scenarios?.[heatTime] && (
+                    <span style={{ fontSize:'0.64rem', color:'#e2e8f0', fontWeight:600 }}>
+                      {heatHourly.scenarios[heatTime].name}
+                      {heatTime === heatHourly.nowIdx && <span style={{ color:'#22c55e', marginLeft:4 }}>• agora</span>}
+                    </span>
+                  )}
+                </div>
+                {heatTimeOn && (
+                  (heatHourlyLoading && !heatHourly) ? (
+                    <div style={{ fontSize:'0.6rem', color:'#94a3b8', marginTop:5 }}>carregando previsão…</div>
+                  ) : heatHourly?.scenarios?.length ? (
+                    <div style={{ display:'flex', alignItems:'center', gap:6, marginTop:5 }}>
+                      <input type="range" min={0} max={heatHourly.scenarios.length - 1} step={1} value={heatTime}
+                        onChange={e => setHeatTime(+e.target.value)}
+                        style={{ flex:1, accentColor:'#38bdf8', cursor:'pointer' }} />
+                      <button type="button" onClick={() => setHeatTime(heatHourly.nowIdx ?? 0)} title="Voltar para agora"
+                        style={{ fontSize:'0.58rem', color:'#7dd3fc', background:'none', border:'none', cursor:'pointer', padding:0 }}>agora</button>
+                    </div>
+                  ) : (
+                    <div style={{ fontSize:'0.6rem', color:'#f87171', marginTop:5 }}>previsão indisponível</div>
+                  )
+                )}
               </div>
             </div>
           )}
           <MapLegend
             heatmapActive={heatmapActive}
             activeColor={activeColor}
+            heatGradient={heatGradientCss(heatPalette, activeColor)}
+            basins={BASINS_BY_COUNTRY[selectedCountry] || BASINS_BY_COUNTRY['UY']}
             showSnapAreas={showSnapAreas}
             showWatercourses={showWatercourses}
             showFishingSpots={showFishingSpots}
@@ -8007,12 +8257,12 @@ const _fmtFishKg = (kg) => !kg ? 'desconhecido' : kg < 1 ? `${Math.round(kg * 10
 // (100k+ trechos) sem travar a reconciliação nem saturar o canvas por contagem de camadas.
 // NÃO-interativa: o clique é resolvido pelo RiverClickHandler no nível do mapa. Memoizada
 // (positions é estável entre cliques) para não redesenhar à toa.
-const BasinLayer = React.memo(function BasinLayer({ positions, color, regionId, lineWeight }) {
+const BasinLayer = React.memo(function BasinLayer({ positions, color, regionId, lineWeight, opacity = 0.7 }) {
   const renderer = getBasinRenderer(regionId || 'default');
   if (!positions || !positions.length) return null;
   return (
     <Polyline positions={positions} interactive={false}
-      pathOptions={{ color, weight: lineWeight, opacity: 0.7, lineCap: 'round', lineJoin: 'round' }}
+      pathOptions={{ color, weight: lineWeight, opacity, lineCap: 'round', lineJoin: 'round' }}
       renderer={renderer}
     />
   );
@@ -8137,8 +8387,11 @@ function _envColor(stops, v) {
   }
   return stops[stops.length-1][1];
 }
-// Cor por porte do rio (ordem 1–10): cabeceiras claras/finas → troncos azul-escuro/grossos.
-const _ORDER_STOPS = [[1,[125,211,252]],[3,[56,189,248]],[5,[14,165,233]],[7,[37,99,235]],[10,[30,58,138]]];
+// Cor por porte do rio. ~80% dos trechos do RS são ordem 3-5, então a escala é
+// concentrada na faixa 2..7 (onde os dados vivem; <2 e >7 são raríssimos e ficam nos
+// extremos por clamp). Rampa de LUMINÂNCIA escuro→quase-branco: cabeceiras apagadas
+// recuam, troncos "brilham" — separa bem as ordens médias mesmo num mapa escuro.
+const _ORDER_STOPS = [[2,[71,85,105]],[3,[37,99,235]],[4,[14,165,233]],[5,[45,212,191]],[6,[165,243,252]],[7,[236,254,255]]];
 function _orderColor(o) { const [r,g,b] = _envColor(_ORDER_STOPS, o); return `rgb(${r},${g},${b})`; }
 
 // CSS linear-gradient para a legenda (a partir das paradas e do domínio)
@@ -8274,6 +8527,96 @@ function BiteTimeTimeline({ lat, lon, locLabel, pressureSensitivity = 0.5 }) {
 // Busca uma grade HORÁRIA (48h) da camada `kind` sobre o bbox do país, recortada à
 // fronteira oficial. Uma única chamada Open-Meteo (multi-coordenada). Cada ponto traz
 // uma série temporal (values[] e, no vento, dirs[]) para o slider de tempo.
+// Chave estável de "rio" (agrupa trechos por nome + bacia base, sem sufixo de país).
+// Trechos sem nome ficam isolados pelo id. Usada no modo de vazão GloFAS (fetch + render).
+function riverGroupKey(name, regionId, id) {
+  const nm = (name || '').trim();
+  if (!nm || /^sem nome$/i.test(nm)) return `__id_${id}`;
+  const base = (regionId || '').replace(/_(UY|AR|BR(-[A-Z]{2})?)$/, '');
+  return `${nm}|${base}`;
+}
+
+// Cor por anomalia de vazão (razão atual/média do mês): vermelho=muito abaixo do normal,
+// ciano=normal, azul=acima (cheia). É o diferencial dinâmico que o GloFAS adiciona ao porte.
+const _DISCHARGE_STOPS = [[0.3,[239,68,68]],[0.7,[249,115,22]],[1.0,[34,211,238]],[1.6,[59,130,246]],[2.6,[37,99,235]]];
+function dischargeColor(ratio) { const [r,g,b] = _envColor(_DISCHARGE_STOPS, ratio); return `rgb(${r},${g},${b})`; }
+
+// Busca vazão GloFAS (Open-Meteo Flood) para os rios-tronco. Para cada rio testa vários
+// pontos ao longo do traçado e fica com o de MAIOR vazão (snap à célula-canal de ~5 km;
+// pontos fora do canal retornam ~0). Retorna { key: { discharge, mean, ratio } } só para
+// rios com canal de fato (>= 5 m³/s). past_days dá a média do mês p/ a anomalia.
+async function fetchRiverDischarges(rivers) {
+  const flat = [];
+  rivers.forEach((r, ri) => r.pts.forEach(p => flat.push({ ri, lat: p[0], lon: p[1] })));
+  if (!flat.length) return {};
+  const best = rivers.map(() => ({ disc: -1, mean: 1 }));
+  const CHUNK = 100;
+  for (let i = 0; i < flat.length; i += CHUNK) {
+    const slice = flat.slice(i, i + CHUNK);
+    const url = `https://flood-api.open-meteo.com/v1/flood?latitude=${slice.map(s=>s.lat).join(',')}&longitude=${slice.map(s=>s.lon).join(',')}&daily=river_discharge&past_days=31&forecast_days=1&timezone=auto`;
+    let data;
+    try { const res = await fetch(url); if (!res.ok) continue; data = await res.json(); } catch { continue; }
+    const arr = Array.isArray(data) ? data : [data];
+    for (let k = 0; k < slice.length; k++) {
+      const series = (arr[k]?.daily?.river_discharge || []).filter(v => v != null);
+      if (!series.length) continue;
+      const current = series[series.length - 2] ?? series[series.length - 1]; // último dia passado
+      const mean = series.reduce((a, b) => a + b, 0) / series.length;
+      const ri = slice[k].ri;
+      if (current > best[ri].disc) best[ri] = { disc: current, mean: mean || 1 };
+    }
+  }
+  const out = {};
+  rivers.forEach((r, ri) => {
+    const b = best[ri];
+    if (b.disc >= 5) out[r.key] = { discharge: +b.disc.toFixed(1), mean: +b.mean.toFixed(1), ratio: b.mean > 0 ? b.disc / b.mean : 1 };
+  });
+  return out;
+}
+
+// Série climática horária (48h) no centro da região — alimenta o slider de tempo do
+// heatmap, permitindo re-scorar a probabilidade hora a hora. Cada item é compatível com
+// um cenário de `climateScenarios` (campos lidos por calculateProbability/pressureBonus).
+async function fetchHeatHourly(country) {
+  const c = COUNTRIES.find(x => x.id === country);
+  if (!c?.bbox) return null;
+  const lat = +((c.bbox.minLat + c.bbox.maxLat) / 2).toFixed(3);
+  const lon = +((c.bbox.minLon + c.bbox.maxLon) / 2).toFixed(3);
+  const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&hourly=temperature_2m,soil_temperature_0_to_7cm,shortwave_radiation,wind_speed_10m,surface_pressure&daily=sunrise,sunset&forecast_days=2&timezone=auto`;
+  const res = await fetch(url);
+  if (!res.ok) return null;
+  const data = await res.json();
+  const h = data.hourly;
+  if (!h?.time?.length) return null;
+  const sunrise = (data.daily?.sunrise?.[0] || '').slice(11);
+  const sunset = (data.daily?.sunset?.[0] || '').slice(11);
+  const dayNames = ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sáb'];
+  const nowMs = Date.now();
+  let nowIdx = 0, bestDelta = Infinity;
+  const scenarios = h.time.map((t, i) => {
+    const d = new Date(t);
+    const delta = Math.abs(d.getTime() - nowMs);
+    if (delta < bestDelta) { bestDelta = delta; nowIdx = i; }
+    const air = Math.round(h.temperature_2m?.[i] ?? 0);
+    const soil = h.soil_temperature_0_to_7cm?.[i] ?? null;
+    const pressure = Math.round(h.surface_pressure?.[i] ?? 1013);
+    const prevPressure = i > 0 ? Math.round(h.surface_pressure?.[i - 1] ?? pressure) : pressure;
+    return {
+      id: `h-${i}`,
+      name: `${dayNames[d.getDay()]} ${String(d.getHours()).padStart(2, '0')}h`,
+      hour: d.getHours(),
+      airTemperature: air,
+      waterTemperature: estimateWaterTemperature(air, soil),
+      solarRadiation: estimateSolarPercent(h.shortwave_radiation?.[i] ?? 0),
+      wind: Math.round(h.wind_speed_10m?.[i] ?? 0),
+      pressure,
+      pressureTrend: pressureTrendLabel(pressure, prevPressure),
+      sunrise, sunset, time: t,
+    };
+  });
+  return { scenarios, nowIdx };
+}
+
 async function fetchEnvGrid(country, kind) {
   const cfg = ENV_LAYERS[kind];
   const c = COUNTRIES.find(x => x.id === country);
@@ -8357,31 +8700,7 @@ function EnvCanvasLayer({ grid, timeIndex = 0, opacity = 0.5 }) {
         ctx.beginPath(); ctx.arc(cp.x, cp.y, R, 0, Math.PI * 2); ctx.fill();
       }
       ctx.globalAlpha = 1;
-      // 2) setas (vento) — apontam para onde o vento vai (dir meteorológica + 180°)
-      if (cfg.arrows) {
-        const len = Math.min(stepPx * 0.55, 26);
-        ctx.strokeStyle = 'rgba(255,255,255,0.9)';
-        ctx.fillStyle = 'rgba(255,255,255,0.9)';
-        ctx.lineWidth = 1.4;
-        for (const p of grid.points) {
-          const dir = p.dirs?.[ti];
-          if (dir == null) continue;
-          const cp = map.latLngToContainerPoint([p.lat, p.lng]);
-          if (cp.x < 0 || cp.x > size.x || cp.y < 0 || cp.y > size.y) continue;
-          const th = (dir + 180) * Math.PI / 180;
-          const dx = Math.sin(th), dy = -Math.cos(th);
-          const x0 = cp.x - dx * len / 2, y0 = cp.y - dy * len / 2;
-          const x1 = cp.x + dx * len / 2, y1 = cp.y + dy * len / 2;
-          ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1, y1); ctx.stroke();
-          // ponta da seta
-          const ah = 5, aa = 0.5;
-          ctx.beginPath();
-          ctx.moveTo(x1, y1);
-          ctx.lineTo(x1 - ah * (dx * Math.cos(aa) - dy * Math.sin(aa)), y1 - ah * (dy * Math.cos(aa) + dx * Math.sin(aa)));
-          ctx.lineTo(x1 - ah * (dx * Math.cos(-aa) - dy * Math.sin(-aa)), y1 - ah * (dy * Math.cos(-aa) + dx * Math.sin(-aa)));
-          ctx.closePath(); ctx.fill();
-        }
-      }
+      // (vento: a direção é mostrada pelas partículas animadas — WindParticlesLayer)
     };
     draw();
     map.on('moveend zoomend viewreset resize', draw);
@@ -8390,8 +8709,81 @@ function EnvCanvasLayer({ grid, timeIndex = 0, opacity = 0.5 }) {
   return null;
 }
 
+// Partículas de vento animadas (estilo Windy) por cima do campo de cor. Advecta
+// partículas pelo vetor de vento (interpolado da grade, em espaço de pixels) com
+// rastro que desvanece. Não-interativo; só para a camada de vento.
+function WindParticlesLayer({ grid, timeIndex = 0 }) {
+  const map = useMap();
+  useEffect(() => {
+    if (!map || !window.L || grid?.kind !== 'wind' || !grid.points?.length) return;
+    const L = window.L;
+    const ti = Math.max(0, Math.min(timeIndex, (grid.times?.length || 1) - 1));
+    const canvas = L.DomUtil.create('canvas', 'leaflet-zoom-animated');
+    canvas.style.pointerEvents = 'none';
+    map.getPanes().overlayPane.appendChild(canvas);
+    const ctx = canvas.getContext('2d');
+    let raf = 0, running = true, particles = [], field = [];
+    const MAX_AGE = 90;
+
+    function rebuild() {
+      const s = map.getSize();
+      canvas.width = s.x; canvas.height = s.y;
+      L.DomUtil.setPosition(canvas, map.containerPointToLayerPoint([0, 0]));
+      // grade projetada em pixels (vetor do vento por ponto, no tempo ti)
+      field = [];
+      for (const p of grid.points) {
+        const dir = p.dirs?.[ti], spd = p.values?.[ti];
+        if (dir == null || spd == null) continue;
+        const cp = map.latLngToContainerPoint([p.lat, p.lng]);
+        const th = (dir + 180) * Math.PI / 180; // para onde o vento vai
+        const mag = Math.min(spd / 40, 1) * 2.6 + 0.35; // px/quadro
+        field.push({ x: cp.x, y: cp.y, vx: Math.sin(th) * mag, vy: -Math.cos(th) * mag });
+      }
+      const n = Math.min(1100, Math.max(180, Math.round(s.x * s.y / 1700)));
+      particles = Array.from({ length: n }, () => ({ x: Math.random() * s.x, y: Math.random() * s.y, age: Math.random() * MAX_AGE }));
+      ctx.clearRect(0, 0, s.x, s.y);
+    }
+    function windAt(x, y) {
+      // vizinho mais próximo na grade (em pixels)
+      let best = null, bd = Infinity;
+      for (const f of field) { const d = (f.x - x) * (f.x - x) + (f.y - y) * (f.y - y); if (d < bd) { bd = d; best = f; } }
+      return best;
+    }
+    function frame() {
+      if (!running) return;
+      const s = map.getSize();
+      // desvanece o rastro (mais lento = rastro mais longo)
+      ctx.globalCompositeOperation = 'destination-out';
+      ctx.fillStyle = 'rgba(0,0,0,0.065)';
+      ctx.fillRect(0, 0, s.x, s.y);
+      ctx.globalCompositeOperation = 'source-over';
+      ctx.strokeStyle = 'rgba(255,255,255,0.92)';
+      ctx.lineWidth = 1.4;
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      for (const p of particles) {
+        const w = windAt(p.x, p.y);
+        if (!w || p.age > MAX_AGE || p.x < 0 || p.x > s.x || p.y < 0 || p.y > s.y) {
+          p.x = Math.random() * s.x; p.y = Math.random() * s.y; p.age = 0; continue;
+        }
+        const nx = p.x + w.vx, ny = p.y + w.vy;
+        ctx.moveTo(p.x, p.y); ctx.lineTo(nx, ny);
+        p.x = nx; p.y = ny; p.age++;
+      }
+      ctx.stroke();
+      raf = requestAnimationFrame(frame);
+    }
+    rebuild();
+    const onReset = () => rebuild();
+    map.on('moveend zoomend viewreset resize', onReset);
+    frame();
+    return () => { running = false; cancelAnimationFrame(raf); map.off('moveend zoomend viewreset resize', onReset); L.DomUtil.remove(canvas); };
+  }, [map, grid, timeIndex]);
+  return null;
+}
+
 // Componente para mostrar todos os cursos d'água quando nenhum está selecionado
-function AllWatercourses({ tributaryLines, waterQualityData, species, occurrences, selectedWatercourseIds, santaLuciaGeometry, extraRivers = [], extraRiverGeometries = {}, activeBasins = new Set(), selectedCountry = 'UY', colorBy = 'basin' }) {
+function AllWatercourses({ tributaryLines, waterQualityData, species, occurrences, selectedWatercourseIds, santaLuciaGeometry, extraRivers = [], extraRiverGeometries = {}, activeBasins = new Set(), selectedCountry = 'UY', colorBy = 'basin', dischargeByRiver = {} }) {
   const map = useMap();
   const [zoom, setZoom] = useState(map?.getZoom() || 11);
   const [hoveredId, setHoveredId] = useState(null);
@@ -8498,14 +8890,21 @@ function AllWatercourses({ tributaryLines, waterQualityData, species, occurrence
   const basinGroups = useMemo(() => {
     const groups = {};
     for (const t of simplifiedLines) {
-      const key = colorBy === 'order'
-        ? `ord-${Math.min(10, Math.max(1, Math.round(t.order || 1)))}`
-        : (t.regionId || 'santa_lucia');
+      let key;
+      if (colorBy === 'order') {
+        key = `ord-${Math.min(10, Math.max(1, Math.round(t.order || 1)))}`;
+      } else if (colorBy === 'discharge') {
+        // Troncos com vazão GloFAS → grupo por rio (disc-<key>); resto → fundo esmaecido.
+        const rk = riverGroupKey(t.name, t.regionId, t.id);
+        key = ((t.order ?? 0) >= 6 && dischargeByRiver[rk]) ? `disc-${rk}` : 'disc-minor';
+      } else {
+        key = (t.regionId || 'santa_lucia');
+      }
       const arr = (groups[key] || (groups[key] = []));
       for (const p of t.paths) arr.push(p);
     }
     return Object.entries(groups).map(([key, positions]) => ({ key, positions }));
-  }, [simplifiedLines, colorBy]);
+  }, [simplifiedLines, colorBy, dischargeByRiver]);
 
   // Se não há dados de tributários e geometria do Santa Lucía, não renderiza nada
   if ((!tributaryLines || tributaryLines.length === 0) && (!santaLuciaGeometry || santaLuciaGeometry.length === 0)) return null;
@@ -8552,6 +8951,9 @@ function AllWatercourses({ tributaryLines, waterQualityData, species, occurrence
     'bacia_jacui_BR-RS':     '#22d3ee',
     bacia_lagopatos:         '#3b82f6',
     'bacia_lagopatos_BR-RS': '#3b82f6',
+    bacia_parana:            '#14b8a6',
+    'bacia_parana_BR-PR':    '#14b8a6',
+    'vertente_atlantica_BR-PR': '#a855f7',
   };
   
   return (
@@ -8616,9 +9018,29 @@ function AllWatercourses({ tributaryLines, waterQualityData, species, occurrence
       {/* Uma multi-polyline por grupo (bacia ou porte do rio); não-interativas */}
       {basinGroups.map(g => {
         const isOrder = colorBy === 'order' && g.key.startsWith('ord-');
-        const ord = isOrder ? +g.key.slice(4) : 0;
-        const color = isOrder ? _orderColor(ord) : (REGION_COLORS[g.key] || '#3b82f6');
-        const w = isOrder ? Math.max(0.6, Math.min(lineWeight * 2.2, 0.5 + ord * 0.55)) : lineWeight;
+        const isDisc = colorBy === 'discharge' && g.key.startsWith('disc-');
+        let color, w, op;
+        if (isDisc) {
+          if (g.key === 'disc-minor') {
+            // fundo esmaecido (cabeceiras/sem dado GloFAS) para os troncos se destacarem
+            color = '#475569'; w = Math.max(0.5, lineWeight * 0.5); op = 0.28;
+          } else {
+            const d = dischargeByRiver[g.key.slice(5)];
+            color = d ? dischargeColor(d.ratio) : '#3b82f6';
+            w = lineWeight * 2.6; op = 0.92; // troncos grossos e vivos (vazão dinâmica)
+          }
+        } else if (isOrder) {
+          const ord = +g.key.slice(4);
+          color = _orderColor(ord);
+          // Porte: remapeia ordem p/ a faixa 2..7 (onde fica ~99% dos trechos) — assim as
+          // ordens médias 3-5 ganham espessuras/opacidades bem distintas.
+          const t = Math.min(1, Math.max(0, (ord - 2) / 5));
+          w = 0.4 + Math.pow(t, 1.6) * (lineWeight * 4);
+          op = 0.4 + t * 0.55;
+        } else {
+          color = REGION_COLORS[g.key] || '#3b82f6';
+          w = lineWeight; op = 0.7;
+        }
         return (
           <BasinLayer
             key={`${g.key}-${selectedCountry}`}
@@ -8626,6 +9048,7 @@ function AllWatercourses({ tributaryLines, waterQualityData, species, occurrence
             positions={g.positions}
             color={color}
             lineWeight={w}
+            opacity={op}
           />
         );
       })}

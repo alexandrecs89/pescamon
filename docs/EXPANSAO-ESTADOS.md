@@ -26,7 +26,7 @@ fora, **cores de bacia coerentes** e **render fluido** (sem travar nem vazar).
 ```
   Fonte oficial IBGE (malha estadual)        Fonte oficial ANA (BHO 2017)
             │                                          │
-   scripts/build_<uf>_boundary.mjs        scripts/build_<uf>_hydrography.mjs
+   scripts/build_boundary.mjs <UF>        scripts/build_hydrography.mjs <UF>
             │                                          │  (usa o boundary p/ recortar)
             ▼                                          ▼
   public/<uf>_boundary.json              public/trib_<uf>_<bacia>.json  (1 por bacia)
@@ -95,19 +95,19 @@ O *método* é o mesmo (seção 5); muda só a *fonte*:
 
 ## 4. O pipeline em 2 fases (scripts de referência)
 
-Os scripts atuais são **específicos do RS** (`build_rs_boundary.mjs`,
-`build_rs_hydrography.mjs`). Para um novo estado, ou parametrize-os (ver seção 8)
-ou copie/adapte. O parser de geometria `scripts/gpkg_geom.mjs` (`parseGpkgGeometry`,
-WKB/GPB sem GDAL) é **genérico** — reutilize como está.
+Os scripts são **parametrizados por UF** (`build_boundary.mjs <UF>` e
+`build_hydrography.mjs <UF>`, ver seção 8). Para um novo estado, adicione uma entrada
+em `UF_CONFIG` (no `build_hydrography.mjs`) e o codarea (no `build_boundary.mjs`). O
+parser de geometria `scripts/gpkg_geom.mjs` (`parseGpkgGeometry`, WKB/GPB sem GDAL) é
+**genérico** — reutilize como está.
 
-### Fase 1 — Fronteira (`build_rs_boundary.mjs`)
-- Baixe o GeoJSON do IBGE (CODAREA da UF) → `public/<uf>_boundary_ibge.geojson`.
-- O script converte o `MultiPolygon` para `{ rings: [[ [lat,lon] ]] }`, descarta
-  anéis minúsculos (< 8 vértices) e ordena por tamanho (continente primeiro).
-  Mantém ilhas costeiras reais.
+### Fase 1 — Fronteira (`build_boundary.mjs <UF>`)
+- Baixa o GeoJSON do IBGE (CODAREA da UF, da tabela `UF_CODAREA`).
+- Converte o `MultiPolygon` para `{ rings: [[ [lat,lon] ]] }`, descarta anéis minúsculos
+  (< 8 vértices) e ordena por tamanho (continente primeiro). Mantém ilhas costeiras reais.
 - Saída: `public/<uf>_boundary.json`.
 
-### Fase 2 — Hidrografia (`build_rs_hydrography.mjs`)
+### Fase 2 — Hidrografia (`build_hydrography.mjs <UF>`)
 Requer Node ≥ 22.5 (usa `node:sqlite`; testado no Node 24). Passos internos:
 1. **Bbox rápido** (R-tree do geopackage) para pegar candidatos da UF.
 2. **Classificação por bacia via TRAÇADO DE FLUXO** (não por código COBACIA — ver
@@ -257,14 +257,17 @@ distribuição sem gerar geometria — **use sempre antes do build completo**).
 
 ---
 
-## 8. Recomendação: GENERALIZAR antes de escalar
+## 8. Generalização (FEITO) — como adicionar um estado
 
-Hoje há acoplamento "RS" hardcoded em 3 lugares. Antes de adicionar o 2º/3º estado,
-vale parametrizar para não duplicar nem repetir bugs:
+Tudo já está parametrizado por país/UF; para um estado novo não se duplica script:
 
-1. **Scripts** → um único `build_boundary.mjs <uf>` e `build_hydrography.mjs <uf>`
-   recebendo: `codarea` IBGE, prefixo de id, mapa de bacias + `classifyTerminal`,
-   e `BASIN_MIN_STRAHLER`. Hoje isso está fixo para o RS.
+1. **Scripts** → ✅ FEITO. `build_boundary.mjs <UF>` (tabela `UF_CODAREA`) e
+   `build_hydrography.mjs <UF>` (tabela `UF_CONFIG` com bbox, prefixo, bacias +
+   `classifyTerminal`, `BASIN_MIN_STRAHLER`, e `dpEps`/`round5` de simplificação).
+   Para um estado novo: adicione uma entrada em `UF_CODAREA` e outra em `UF_CONFIG`
+   (rode `--terminals`/`--dry` para desenhar o `classifyTerminal` e calibrar limiares).
+   Os scripts `build_<uf>_*.mjs` por estado foram removidos (RS/SC/PR unificados;
+   validados byte-idênticos aos JSONs commitados). O UY segue à parte (DINAGUA, não BHO).
 2. **Contorno no app** → ✅ FEITO. Existe `loadBoundary(countryId)` genérico +
    tabela `_BOUNDARY_FILES = { 'BR-RS': 'rs_boundary.json', 'UY': 'uy_boundary.json' }`;
    o `AllWatercourses` desenha o contorno de qualquer país que tenha o arquivo. Para
@@ -297,8 +300,8 @@ vale parametrizar para não duplicar nem repetir bugs:
 ---
 
 ## Referências rápidas
-- Scripts: `scripts/build_rs_boundary.mjs`, `scripts/build_rs_hydrography.mjs`,
-  `scripts/gpkg_geom.mjs` (parser WKB genérico).
+- Scripts: `scripts/build_boundary.mjs <UF>`, `scripts/build_hydrography.mjs <UF>`,
+  `scripts/build_protected_areas.mjs <UF>`, `scripts/gpkg_geom.mjs` (parser WKB genérico).
 - Config do front: `src/main.jsx` → `COUNTRIES` (~l.144), `BASINS_BY_COUNTRY`
   (~l.196), `_canvasRenderer`/`getBasinRenderer`/`BasinLayer` (~l.7470+),
   `_TRIB_VERSION` (~l.1328), bloco de contorno/`loadRSBoundary`.

@@ -33,13 +33,6 @@ const IconMap = () => (
 );
 
 // ─── Constantes visuais do mapa ───────────────────────────────────────────────
-const PROB_SCALE = [
-  { label: '≥ 78%',  color: '#ef4444', desc: 'Muito alta' },
-  { label: '62–77%', color: '#f97316', desc: 'Alta'       },
-  { label: '46–61%', color: '#eab308', desc: 'Média'      },
-  { label: '< 46%',  color: '#22c55e', desc: 'Baixa'      },
-];
-
 const SNAP_CATEGORIES = [
   { color: '#16a34a', icon: '🏞️', label: 'Parque Nacional'       },
   { color: '#0ea5e9', icon: '🌿', label: 'Paisagem Protegida'    },
@@ -77,11 +70,11 @@ function LineSwatch({ color, dashed }) {
   );
 }
 
-function GradientBar({ color }) {
+function GradientBar({ color, gradient }) {
   return (
     <div style={{
       width: '100%', height: 8, borderRadius: 4,
-      background: `linear-gradient(to right, ${color}22, ${color}99, ${color})`,
+      background: gradient || `linear-gradient(to right, ${color}22, ${color}99, ${color})`,
       marginBottom: 4,
     }} />
   );
@@ -122,6 +115,8 @@ function LegendRow({ left, label, sub }) {
 export default function MapLegend({
   heatmapActive,
   activeColor,
+  heatGradient,
+  basins,
   showSnapAreas,
   showWatercourses,
   showFishingSpots,
@@ -271,15 +266,10 @@ export default function MapLegend({
           {/* Heatmap de probabilidade */}
           {heatmapActive && (
             <Section title="Probabilidade de captura">
-              <GradientBar color={activeColor} />
-              {PROB_SCALE.map(p => (
-                <LegendRow
-                  key={p.label}
-                  left={<Swatch color={p.color} size={11} radius={2} />}
-                  label={p.desc}
-                  sub={p.label}
-                />
-              ))}
+              <GradientBar color={activeColor} gradient={heatGradient} />
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.6rem', color: 'var(--text-dim)', marginBottom: 6 }}>
+                <span>baixa</span><span>média</span><span>alta</span>
+              </div>
               <LegendRow
                 left={
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 1, alignItems: 'center' }}>
@@ -307,14 +297,14 @@ export default function MapLegend({
             </Section>
           )}
 
-          {/* Cursos d'água */}
+          {/* Cursos d'água — bacias da região ativa (fallback: UY) */}
           {showWatercourses && (
             <Section title="Bacias Hidrográficas">
-              {BASINS.map(b => (
+              {(basins && basins.length ? basins : BASINS).map(b => (
                 <LegendRow
-                  key={b.label}
+                  key={b.id || b.label}
                   left={<LineSwatch color={b.color} />}
-                  label={b.label}
+                  label={b.name || b.label}
                 />
               ))}
             </Section>

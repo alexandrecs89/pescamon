@@ -4,7 +4,7 @@
 
 A hidrografia de cada região vem de **dados oficiais do governo local** (ANA/IBGE no Brasil, DINAGUA no Uruguai), recortada à fronteira oficial e classificada por bacia. A escolha de região é feita por um **seletor geográfico no mapa** (mundo → país → estado).
 
-**Estado atual (junho 2026):** aplicação em produção em [pescamon.com.br](https://pescamon.com.br) / [pescamon-app.netlify.app](https://pescamon-app.netlify.app). Última sessão de desenvolvimento: 12/06/2026.
+**Estado atual (junho 2026):** aplicação em produção em [pescamon.com.br](https://pescamon.com.br) / [pescamon-app.netlify.app](https://pescamon-app.netlify.app). Última sessão de desenvolvimento: 15/06/2026.
 
 Stack: **React 18 + Vite · react-leaflet · Supabase · Open-Meteo · IndexedDB · PWA**
 
@@ -40,7 +40,7 @@ A regra do projeto é **sempre usar os dados oficiais do governo local**. Quando
 | Região | Fonte oficial | Conteúdo gerado |
 |---|---|---|
 | **Rio Grande do Sul (BR-RS)** | ANA — BHO 2017 (geopackage) + fronteira IBGE (codarea 43) | `public/trib_rs_*.json` (43.522 trechos em 4 bacias: Uruguai, Jacuí, Mirim, Vertente Atlântica), `public/rs_boundary.json` |
-| **Santa Catarina (BR-SC)** | ANA — BHO 2017 + fronteira IBGE (codarea 42) | `public/trib_sc_*.json` (45.951 trechos em 2 bacias: Uruguai interior, Vertente Atlântica; simplificados Douglas-Peucker), `public/sc_boundary.json` |
+| **Santa Catarina (BR-SC)** | ANA — BHO 2017 + fronteira IBGE (codarea 42) | `public/trib_sc_*.json` (168.433 trechos em 2 bacias: Uruguai interior, Vertente Atlântica; simplificados Douglas-Peucker), `public/sc_boundary.json` |
 | **Uruguai (UY)** | DINAGUA (WFS — cursos `c257` + cuencas Nível 1 `c097`) | `public/trib_uy_*.json` (6 bacias), `public/uy_boundary.json` |
 | **Brasil (silhueta + 27 estados)** | IBGE malhas v3 | `public/br_boundary.json`, `public/br_states.json` (seletor geográfico) |
 | **Santa Lucía (legado MVP)** | OSM relation 2736318 / Overpass | `public/export.geojson`, `public/tributarios.geojson` (~614 afluentes) |
@@ -274,9 +274,8 @@ Um pilar do projeto é ajudar o pescador a pescar **dentro da lei**. As camadas 
 - Login social Apple ainda não configurado (Google e Facebook ativos).
 - LSTM inativo por falta de volume de dados (threshold: ≥30 capturas/espécie).
 - Hidrografia oficial disponível para **RS**, **SC** e **UY**; demais estados/regiões seguem o pipeline de expansão (ver `docs/EXPANSAO-ESTADOS.md`).
-- Os scripts de hidrografia por estado (`build_rs_hydrography.mjs`, `build_sc_hydrography.mjs`) ainda repetem código — falta unificá-los num único script parametrizado por UF.
 - Espécies de SC usam o catálogo compartilhado da Bacia do Uruguai; um refinamento por curso (litoral vs. interior) fica como melhoria futura.
-- Bug conhecido: troca muito rápida de país pode somar trechos de duas regiões (fetches em voo não cancelados).
+- ~~Bug: troca muito rápida de país somava trechos de duas regiões~~ — **corrigido** (loads de hidrografia concorrentes agora abortam por token de geração).
 
 ## Deploy e execução
 
@@ -316,7 +315,7 @@ No Netlify: Site settings → Environment variables → adicionar as mesmas duas
 - Build Vite com code splitting (~906 kB JS, ~120 kB CSS)
 - PWA com service worker e cache offline
 - **Hidrografia oficial RS** (ANA BHO 2017 — 43.522 trechos em 4 bacias, recortados à fronteira IBGE) com render estável (pool de canvas por bacia)
-- **Hidrografia oficial SC** (ANA BHO 2017 — 45.951 trechos em 2 bacias: Uruguai interior + Vertente Atlântica, simplificados Douglas-Peucker)
+- **Hidrografia oficial SC** (ANA BHO 2017 — 168.433 trechos em 2 bacias: Uruguai interior + Vertente Atlântica, simplificados Douglas-Peucker)
 - **Hidrografia oficial UY** (DINAGUA — cursos + cuencas Nível 1, 6 bacias) substituindo o MVP do Santa Lucía
 - **Seletor geográfico no mapa** (mundo → país → estado): Brasil/Uruguai clicáveis; 27 estados do Brasil desenhados (RS e SC clicáveis); lembra a última região
 - **Conformidade legal ciente de região**: 101 UCs CNUC (RS) + 179 UCs CNUC (SC) + 21 áreas SNAP (UY); vedas/defeso por região (piracema IBAMA na Bacia do Rio Uruguai = RS+SC; defeso Lagoa dos Patos e safra da tainha)
@@ -324,7 +323,7 @@ No Netlify: Site settings → Environment variables → adicionar as mesmas duas
 - **46 corpos d'água** + **~614 afluentes** + tributários por bacia/país (UY/AR/BR)
 - **11 macro-regiões** do Uruguai com seletor hierárquico por distância
 - **50 espécies** (cientes de país) com perfis ecológicos, conservação CARU/DINARA/IBAMA/SEMA-RS, vedas e tamanhos mínimos
-- **Heatmap morfológico completo**: bandas laterais (`lateralProfile`) em **todos** os cursos selecionados — Rio Santa Lucía, EXTRA_RIVERS (Rio Negro, Uruguay, etc.) e afluentes. Linhas estáticas somem ao ativar heatmap. Cor sempre derivada da espécie selecionada.
+- **Heatmap morfológico completo**: bandas laterais (`lateralProfile`) com **glow** em **todos** os cursos selecionados — Rio Santa Lucía, EXTRA_RIVERS (Rio Negro, Uruguay, etc.), afluentes UY e **rios do RS** (caminho de afluentes desacoplado do legado Santa Lucía). Linhas estáticas somem ao ativar heatmap. **Duas paletas alternáveis** na legenda: *Térmica* (azul→vermelho) e *Espécie* (tom da espécie); normalização relativa+absoluta; persistida em `localStorage`.
 - Bayesian-ensemble (logístico + random forest + prior espacial gaussiano adaptativo)
 - Pescaria Ativa com fotos, peso, isca e retomada automática de sessão
 - Planejador wizard 6 etapas + exportação Calendar/PDF/GPX
@@ -365,22 +364,24 @@ No Netlify: Site settings → Environment variables → adicionar as mesmas duas
 #### 🥇 Alta prioridade — diferencial visual (estilo Windy, sobre o nosso heatmap)
 
 - [x] **Camadas ambientais no mapa** (estilo Windy): seletor "Ambiente" com **Temp. água · Vento · Pressão** — campo contínuo por gradiente radial (`EnvCanvasLayer`, config-driven em `ENV_LAYERS`), legenda kind-aware; o vento ainda desenha **setas de direção**. Grade Open-Meteo (1 chamada multi-coordenada) recortada à fronteira; não-interativas (rios seguem clicáveis por cima).
-- [x] **Vazão/porte como coloração da rede**: modo `riverColorBy='order'` colore os trechos por ordem do rio (BHO) — cabeceiras claras/finas → troncos azul-escuro/grossos. (Vazão dinâmica por trecho via GloFAS continua futura.)
-- [x] **Slider de tempo (camadas ambientais)**: `fetchEnvGrid` busca a série horária 48h; slider na legenda varre o forecast recolorindo o campo (e as setas de vento). _Falta estender ao heatmap de espécie._
+- [x] **Porte como coloração da rede**: modo `riverColorBy='order'` colore por **ordem de Strahler** (`nustrahler`) — cabeceiras finas/apagadas → troncos grossos/vivos. (Bug corrigido: o campo gravava `nuordemcda`, hierárquico invertido, que destacava cabeceiras como troncos; ver "campo order = Strahler" abaixo.)
+- [x] **Legenda do heatmap país-ciente (bacias)**: a seção "Bacias Hidrográficas" do `MapLegend` agora vem de `BASINS_BY_COUNTRY[selectedCountry]` (RS mostra Uruguai/Jacuí/Mirim/Vertente). _Resta_ tornar país-ciente a seção de áreas protegidas (SNAP→CNUC).
+- [x] **Slider de tempo (camadas ambientais)**: `fetchEnvGrid` busca a série horária 48h; slider na legenda varre o forecast recolorindo o campo (e as setas de vento). _Estendido também ao heatmap de espécie (ver abaixo)._
 - [x] **Timeline de "bite time"** (`BiteTimeTimeline`): atividade horária 48h por local/espécie (crepúsculo + lua + pressão + vento + nuvens), com melhores janelas e marcador "agora".
-- [ ] **Estender o slider de tempo ao heatmap de espécie** (re-score por hora) e **vazão dinâmica (GloFAS)** por trecho.
-- [ ] **Timeline de atividade ("bite time")** por local/espécie: score temporal (tipo 4×6h do Windy) com solunar + pressão (`pressureSensitivity`) + clima.
-- [ ] **Polir o heatmap de espécie**: gradiente contínuo + legenda + slider de tempo (varrer o forecast recolorindo o mapa).
+- [x] **Vento animado (partículas, estilo Windy)**: `WindParticlesLayer` adveca partículas pelo campo de vento (interpolado em pixels) com rastro que desvanece, por cima do campo de cor. Substitui as setas estáticas. (Animação só roda em navegador visível — o preview headless pausa o `requestAnimationFrame`.)
+- [x] **Slider de tempo no heatmap de espécie** (re-score por hora): toggle "⏱ Hora" na legenda do heatmap busca a série climática 48h horária (`fetchHeatHourly`, centro da região) e re-scora a probabilidade hora a hora; `effectiveClimate` alimenta os três memos de scoring, com `useDeferredValue` para arraste fluido. Funciona em RS, UY e rios extras.
+- [x] **Legenda do heatmap (cores)**: o `MapLegend` agora reflete o gradiente real da paleta (antes mostrava verde→vermelho fixo que não batia com o render). Toggle Térmica/Espécie na legenda do mapa.
+- [x] **Vazão dinâmica (GloFAS)** nos troncos: modo `riverColorBy='discharge'` (menu "💧 Vazão (GloFAS)") colore os rios-tronco (Strahler ≥ 6) pela **anomalia atual÷média do mês** do GloFAS/Open-Meteo Flood (vermelho=seca, ciano=normal, azul=cheia), com a malha menor esmaecida. Snap à célula-canal de ~5 km por busca do ponto de maior vazão ao longo do rio (`fetchRiverDischarges`). Verificado: Uruguai 896, Jacuí 386, Pelotas 325 m³/s. _Cabeceiras/sangas (~80% dos trechos) não têm série GloFAS — por isso é só nos troncos._
 
 #### 🥇 Alta prioridade — escalar territorialmente
 
-- [ ] **Unificar os scripts de hidrografia num único `build_hydrography.mjs <uf>`** (`docs/EXPANSAO-ESTADOS.md` §8): hoje `build_rs_hydrography.mjs` e `build_sc_hydrography.mjs` repetem ~90% do código (mudam só bbox, bacias, `classifyTerminal` e `BASIN_MIN_STRAHLER`). Parametrizar evita duplicação no 3º estado. (Já feito: `build_protected_areas.mjs <uf>`, `build_sc_boundary.mjs`, e os branches do app passaram a usar `/^BR-/`.)
-- [ ] **Próximo estado (ex.: Paraná, codarea 41)**: repetir a esteira (fronteira → hidrografia → UCs CNUC → legislação → espécies → habilitar no seletor).
+- [x] **Scripts de hidrografia/fronteira unificados**: `build_hydrography.mjs <uf>` e `build_boundary.mjs <UF>` (parametrizados por `UF_CONFIG`: bbox, bacias+limiar, `classifyTerminal`, prefixo, `dpEps`/`round5`) substituem os 5 scripts por estado (RS/SC/PR). Validado: reproduzem byte-idêntico os JSONs commitados dos 3 estados.
+- [x] **Paraná (BR-PR, codarea 41)** — expansão completa: fronteira (IBGE) + hidrografia (BHO, 67.825 trechos em 2 bacias: Paraná + Vertente Atlântica) + 108 UCs (CNUC) + catálogo de espécies (regions += BR-PR) + legislação (piracema da Bacia do Paraná, ~nov–fev, IAT-PR/IBAMA) + clicável no seletor geográfico.
 - [ ] **Áreas protegidas do Uruguai no modelo region-aware**: migrar o `SNAP_AREAS` inline para `protected_areas_uy.json` (mesmo formato do RS/SC), unificando a camada legal.
 
 #### 🥈 Média prioridade — qualidade e produto
 
-- [ ] **Bug: acúmulo de rios ao trocar de país rapidamente** — cancelar fetches de hidrografia em voo ao trocar de região (evita somar trechos de UY+RS). Conhecido e isolado.
+- [x] **Bug: acúmulo de rios ao trocar de país rapidamente** — loads de hidrografia concorrentes agora abortam por token de geração (`_trib.loadToken`), evitando somar trechos de UY+RS.
 - [ ] **Expansão Argentina**: Río Paraná (Corrientes, Entre Ríos), baixo Río Uruguay, Delta — dados oficiais (IGN/INA) ou HydroSHEDS como fallback; espécies Dorado, Surubí, Pacú, Manguruyú.
 - [ ] **Onboarding pelo seletor geográfico**: usar o mapa de seleção como tela de boas-vindas para novos usuários (primeira escolha de região guiada).
 - [ ] **API pública para pesquisadores**: OpenAPI documentada via Supabase Edge Functions (rate-limit, auth por token).
@@ -396,7 +397,13 @@ No Netlify: Site settings → Environment variables → adicionar as mesmas duas
 
 #### ✅ Concluído recentemente (jun/2026)
 
-- [x] **Expansão Santa Catarina (BR-SC)**: hidrografia oficial (45.951 trechos, 2 bacias), 179 UCs CNUC, legislação (piracema + tainha) e espécies; clicável no seletor geográfico
+- [x] **Expansão Paraná (BR-PR)**: hidrografia oficial (67.825 trechos, 2 bacias: Paraná + Vertente Atlântica), 108 UCs CNUC, espécies (regions += BR-PR) e legislação (piracema da Bacia do Paraná); clicável no seletor. Novo `build_boundary.mjs <UF>` parametrizado.
+- [x] **Campo `order` = Strahler (correção)**: `build_rs/sc_hydrography.mjs` passou a gravar `nustrahler` (tronco = ordem alta) em vez de `nuordemcda` (hierárquico invertido). Conserta o Porte (destacava cabeceiras como troncos) e destrava o GloFAS. **RS e SC regenerados** (só o campo `order`, geometria idêntica; Uruguai/Iguaçu maxOrder 9, Pelotas/Canoas 8)
+- [x] **Vazão dinâmica GloFAS** nos troncos (anomalia atual÷média; snap à célula-canal) + **legenda país-ciente das bacias** + **slider de tempo no heatmap**
+- [x] **Heatmap de espécies — upgrade visual + RS**: duas paletas alternáveis (Térmica/Espécie) com glow e normalização relativa+absoluta; legenda alinhada à paleta; **passou a renderizar nos rios do RS** (corrigido o memo preso por mutação in-place do `_trib.data` + match de ids compostos BR; teto de 2500 segmentos)
+- [x] **Vento animado (partículas estilo Windy)**: `WindParticlesLayer` advecta partículas pelo campo de vento, substituindo as setas estáticas
+- [x] **Porte/vazão (coloração por ordem)**: escala remapeada para a faixa 2–7 com rampa multi-matiz e largura/opacidade por ordem; seleção de bacias persistida (não reativa todas ao desligar)
+- [x] **Expansão Santa Catarina (BR-SC)**: hidrografia oficial (168.433 trechos, 2 bacias), 179 UCs CNUC, legislação (piracema + tainha) e espécies; clicável no seletor geográfico
 - [x] **Hidrografia oficial RS** (ANA BHO 2017, 43.522 trechos, 4 bacias, recorte IBGE) + render por bacia
 - [x] **Hidrografia oficial UY** (DINAGUA, 6 bacias) substituindo o MVP do Santa Lucía
 - [x] **Áreas protegidas RS** (101 UCs CNUC) + **legislação de pesca ciente de região**
@@ -464,8 +471,8 @@ No Netlify: Site settings → Environment variables → adicionar as mesmas duas
 
 | Arquivo | Responsabilidade |
 |---|---|
-| `scripts/build_rs_boundary.mjs` · `build_sc_boundary.mjs` | Fronteira oficial do estado (IBGE malhas v3, codarea 43=RS / 42=SC) → `public/<uf>_boundary.json` |
-| `scripts/build_rs_hydrography.mjs` · `build_sc_hydrography.mjs` | Hidrografia do estado (ANA BHO 2017): classifica por fluxo, recorta à fronteira, simplifica → `public/trib_<uf>_*.json` |
+| `scripts/build_boundary.mjs <UF>` | Fronteira oficial de qualquer estado BR (IBGE malhas v3 por codarea) → `public/<uf>_boundary.json` |
+| `scripts/build_hydrography.mjs <UF>` | Hidrografia do estado (ANA BHO 2017): classifica por fluxo, recorta à fronteira, simplifica → `public/trib_<uf>_*.json`. `UF_CONFIG` (RS/SC/PR) com bbox, bacias+limiar, `classifyTerminal`, `dpEps`/`round5` |
 | `scripts/build_uy_boundary.mjs` · `build_uy_hydrography.mjs` | Fronteira e hidrografia do Uruguai (DINAGUA WFS) → `public/uy_boundary.json`, `trib_uy_*.json` |
 | `scripts/build_protected_areas.mjs <uf>` | UCs do CNUC/MMA (shapefile) → `public/protected_areas_<uf>.json` (RS=101, SC=179) |
 | `scripts/build_br_geo.mjs` | Silhueta nacional + 27 estados (IBGE) → `public/br_boundary.json`, `public/br_states.json` |

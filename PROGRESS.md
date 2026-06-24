@@ -9,12 +9,12 @@
 
 ## 🗺️ Sessões recentes (jun/2026) — dados oficiais e expansão
 
-- **Hidrografia oficial RS** (ANA BHO 2017): 43.522 trechos classificados por fluxo em 4 bacias, recortados à fronteira IBGE; render estável por pool de canvas por bacia. Scripts `build_rs_boundary.mjs` + `build_rs_hydrography.mjs`.
+- **Hidrografia oficial RS** (ANA BHO 2017): 43.522 trechos classificados por fluxo em 4 bacias, recortados à fronteira IBGE; render estável por pool de canvas por bacia. Scripts unificados `build_boundary.mjs <UF>` + `build_hydrography.mjs <UF>` (RS/SC/PR).
 - **Hidrografia oficial UY** (DINAGUA WFS): cursos `c257` + cuencas Nível 1 `c097` → 6 bacias; substitui o MVP do Rio Santa Lucía. Scripts `build_uy_boundary.mjs` + `build_uy_hydrography.mjs`.
 - **Conformidade legal ciente de região**: 101 UCs do CNUC/MMA no RS (`build_protected_areas.mjs` → `protected_areas_rs.json`) + 21 áreas SNAP do UY; vedas/defeso por região (`VEDAS` com campo `region`; `FISHING_LAW_NOTE`).
 - **Catálogo de espécies ciente de país** (50 espécies): exóticos do RS só no Brasil; vedas granulares por espécie (piracema IBAMA IN 193/2008; tainha/bagre regulados).
 - **Seletor geográfico no mapa** (`<GeoPicker>`): mundo → país → estado; Brasil e Uruguai clicáveis; 27 estados do Brasil desenhados (RS clicável). Dados via `build_br_geo.mjs` (`br_boundary.json`, `br_states.json`). Lembra a última região.
-- **Santa Catarina (BR-SC) — CONCLUÍDO:** fronteira IBGE (codarea 42), hidrografia BHO (45.951 trechos em 2 bacias, simplificados Douglas-Peucker), 179 UCs do CNUC, legislação (piracema da Bacia do Rio Uruguai + safra da tainha) e espécies; clicável no seletor geográfico. Branches do app generalizados para `/^BR-/`; `build_protected_areas.mjs` parametrizado por UF.
+- **Santa Catarina (BR-SC) — CONCLUÍDO:** fronteira IBGE (codarea 42), hidrografia BHO (168.433 trechos em 2 bacias, simplificados Douglas-Peucker), 179 UCs do CNUC, legislação (piracema da Bacia do Rio Uruguai + safra da tainha) e espécies; clicável no seletor geográfico. Branches do app generalizados para `/^BR-/`; `build_protected_areas.mjs` parametrizado por UF.
 
 Branch de trabalho: `feat/hidrografia-oficial-areas-protegidas` (PR #1).
 
